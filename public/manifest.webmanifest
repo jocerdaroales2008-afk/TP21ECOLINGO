@@ -1,0 +1,13 @@
+{
+  "name": "EcoLingo — Reciclaje Domiciliario",
+  "short_name": "EcoLingo",
+  "description": "Aprende a reciclar, encuentra puntos limpios y crea hábitos sostenibles.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#1b5e20",
+  "lang": "es",
+  "icons": [
+    { "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}
