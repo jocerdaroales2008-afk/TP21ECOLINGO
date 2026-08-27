@@ -5,7 +5,9 @@ export type MaterialCategory =
   | 'vidrio'
   | 'metal'
   | 'raee'
-  | 'pilas';
+  | 'pilas'
+  | 'textil'
+  | 'peligroso';
 
 export interface RecyclingItem {
   id: string;
@@ -69,6 +71,8 @@ export const MATERIAL_LABELS: Record<MaterialCategory, string> = {
   metal: 'Metal',
   raee: 'Electrónicos',
   pilas: 'Pilas',
+  textil: 'Textiles',
+  peligroso: 'Residuos peligrosos',
 };
 
 export const MATERIAL_COLORS: Record<MaterialCategory, string> = {
@@ -79,4 +83,6 @@ export const MATERIAL_COLORS: Record<MaterialCategory, string> = {
   metal: '#757575',
   raee: '#7b1fa2',
   pilas: '#d32f2f',
+  textil: '#8e24aa',
+  peligroso: '#b71c1c',
 };

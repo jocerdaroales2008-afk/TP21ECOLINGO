@@ -1,8 +1,10 @@
-import { useState, useRef, useCallback, useEffect } from 'react';
+import { useState, useRef, useCallback, useEffect, type ChangeEvent } from 'react';
 import { Camera, X, Check, Loader2, RefreshCw, Volume2 } from 'lucide-react';
 import { useAccessibility } from '@/context/AccessibilityContext';
-import { RECYCLING_ITEMS } from '@/data/recyclingData';
-import { MATERIAL_LABELS, type RecyclingItem } from '@/types';
+import { classifyMaterial } from '@/data/recyclingData';
+import { MATERIAL_COLORS, MATERIAL_LABELS, type RecyclingItem } from '@/types';
+import * as mobilenet from '@tensorflow-models/mobilenet';
+import '@tensorflow/tfjs';
 
 type ScanPhase = 'idle' | 'camera' | 'scanning' | 'result';
 
@@ -11,9 +13,16 @@ export function CameraScanner({ onResult }: { onResult?: (item: RecyclingItem) =
   const [phase, setPhase] = useState<ScanPhase>('idle');
   const [error, setError] = useState('');
   const [detectedItem, setDetectedItem] = useState<RecyclingItem | null>(null);
+  const [confidence, setConfidence] = useState<number | null>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  const modelRef = useRef<Promise<mobilenet.MobileNet> | null>(null);
+
+  const getModel = () => {
+    if (!modelRef.current) modelRef.current = mobilenet.load();
+    return modelRef.current;
+  };
 
   const stopCamera = useCallback(() => {
     if (streamRef.current) {
@@ -31,6 +40,7 @@ export function CameraScanner({ onResult }: { onResult?: (item: RecyclingItem) =
     setError('');
     setPhase('camera');
     try {
+      if (!navigator.mediaDevices?.getUserMedia) throw new Error('unsupported');
       const stream = await navigator.mediaDevices.getUserMedia({
         video: { facingMode: 'environment' },
         audio: false,
@@ -46,9 +56,26 @@ export function CameraScanner({ onResult }: { onResult?: (item: RecyclingItem) =
     }
   };
 
-  const capturePhoto = () => {
-    if (!videoRef.current || !canvasRef.current) return;
+  const analyzeImage = async (image: HTMLCanvasElement | HTMLImageElement) => {
     setPhase('scanning');
+    try {
+      const predictions = await (await getModel()).classify(image);
+      const prediction = predictions[0];
+      if (!prediction) throw new Error('empty');
+      const item = classifyMaterial(prediction.className);
+      setDetectedItem(item);
+      setConfidence(prediction.probability);
+      setPhase('result');
+      onResult?.(item);
+      speak(`${item.name}. Categoría: ${MATERIAL_LABELS[item.category]}. ${item.steps.join(' ')}`);
+    } catch {
+      setError('No se pudo analizar la imagen. Comprueba tu conexión e inténtalo de nuevo.');
+      setPhase('idle');
+    }
+  };
+
+  const capturePhoto = async () => {
+    if (!videoRef.current || !canvasRef.current) return;
 
     const video = videoRef.current;
     const canvas = canvasRef.current;
@@ -58,13 +85,16 @@ export function CameraScanner({ onResult }: { onResult?: (item: RecyclingItem) =
     if (ctx) ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
     stopCamera();
+    await analyzeImage(canvas);
+  };
 
-    setTimeout(() => {
-      const random = RECYCLING_ITEMS[Math.floor(Math.random() * RECYCLING_ITEMS.length)];
-      setDetectedItem(random);
-      setPhase('result');
-      onResult?.(random);
-    }, 1800);
+  const handleGalleryImage = (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    const image = new Image();
+    image.onload = async () => { await analyzeImage(image); URL.revokeObjectURL(image.src); };
+    image.onerror = () => { setError('No se pudo leer esa fotografía.'); setPhase('idle'); };
+    image.src = URL.createObjectURL(file);
   };
 
   const speakResult = () => {
@@ -75,6 +105,8 @@ export function CameraScanner({ onResult }: { onResult?: (item: RecyclingItem) =
   const reset = () => {
     stopSpeaking();
     setDetectedItem(null);
+    setConfidence(null);
+    setError('');
     setPhase('idle');
   };
 
@@ -82,6 +114,8 @@ export function CameraScanner({ onResult }: { onResult?: (item: RecyclingItem) =
     stopCamera();
     stopSpeaking();
     setDetectedItem(null);
+    setConfidence(null);
+    setError('');
     setPhase('idle');
   };
 
@@ -96,18 +130,14 @@ export function CameraScanner({ onResult }: { onResult?: (item: RecyclingItem) =
 
   if (phase === 'idle') {
     return (
-      <button
-        onClick={startCamera}
-        className="eco-card group flex w-full items-center gap-4 p-5 text-left transition hover:-translate-y-1 hover:shadow-lg"
-      >
-        <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-forest-100 text-forest-700 transition group-hover:bg-forest-700 group-hover:text-white dark:bg-forest-900 dark:text-forest-300">
-          <Camera size={24} />
-        </span>
-        <span>
-          <span className="block font-bold">Escáner de residuos</span>
-          <span className="text-sm text-[var(--eco-text-muted)]">Usa la cámara para detectar materiales</span>
-        </span>
-      </button>
+      <div className="eco-card flex flex-col gap-4 p-5 sm:flex-row sm:items-center">
+        <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-forest-100 text-forest-700 dark:bg-forest-900 dark:text-forest-300"><Camera size={24} /></span>
+        <div className="min-w-0 flex-1"><p className="font-bold">Escáner inteligente</p><p className="text-sm text-[var(--eco-text-muted)]">Analiza un objeto con cámara o fotografía.</p></div>
+        <div className="flex flex-col gap-2 sm:flex-row">
+          <button onClick={startCamera} className="eco-btn"><Camera size={18} /> Cámara</button>
+          <label className="eco-btn-outline cursor-pointer"><input className="sr-only" type="file" accept="image/*" onChange={handleGalleryImage} /> Foto</label>
+        </div>
+      </div>
     );
   }
 
@@ -154,6 +184,8 @@ export function CameraScanner({ onResult }: { onResult?: (item: RecyclingItem) =
                   Material detectado: {MATERIAL_LABELS[detectedItem.category]}
                 </p>
                 <h3 className="text-lg font-extrabold">{detectedItem.name}</h3>
+                {confidence !== null && <p className="text-xs text-[var(--eco-text-muted)]">Confianza del modelo: {Math.round(confidence * 100)}%</p>}
+                <p className="text-xs font-semibold" style={{ color: MATERIAL_COLORS[detectedItem.category] }}>Contenedor recomendado: {MATERIAL_LABELS[detectedItem.category]}. Confirma el color local.</p>
               </div>
             </div>
 

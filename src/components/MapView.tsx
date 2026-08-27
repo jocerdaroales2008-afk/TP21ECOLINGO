@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { formatDistance, type GeoLocation } from '@/hooks/useGeolocation';
-import type { CleanPoint } from '@/types';
+import { MATERIAL_LABELS, type CleanPoint } from '@/types';
 
 interface MapViewProps {
   points: (CleanPoint & { realDistance: number })[];
@@ -75,7 +75,7 @@ export function MapView({ points, userLocation }: MapViewProps) {
       }).addTo(map);
 
       marker.bindPopup(
-        `<strong>${p.name}</strong><br>${p.address}<br><small>${p.hours}</small><br><strong>${formatDistance(p.realDistance)}</strong>`,
+        `<strong>${p.name}</strong><br>${p.address}<br><small>Acepta: ${p.materials.map((material) => MATERIAL_LABELS[material]).join(', ')}</small><br><small>${p.hours}</small><br><strong>${formatDistance(p.realDistance)}</strong><br><a href="https://www.google.com/maps/dir/?api=1&destination=${p.lat},${p.lng}" target="_blank" rel="noreferrer">Cómo llegar</a>`,
       );
       pointMarkersRef.current.push(marker);
     });
@@ -92,7 +92,7 @@ export function MapView({ points, userLocation }: MapViewProps) {
   return (
     <div className="eco-card overflow-hidden">
       <style>{`@keyframes eco-ping{0%{transform:scale(1);opacity:0.6}100%{transform:scale(3);opacity:0}}`}</style>
-      <div ref={containerRef} className="h-[380px] w-full" />
+      <div ref={containerRef} className="h-[calc(100vh-13rem)] min-h-[380px] w-full" />
     </div>
   );
 }

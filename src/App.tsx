@@ -5,9 +5,9 @@ import {
   MapPin, MapPinned, Menu, Mic, Navigation, Pause, Play, Plus, Recycle, Search, Settings, ShieldCheck,
   Smartphone, Sparkles, Sprout, Square, Trophy, Users, Volume2, Waves, Wine, X, Zap, type LucideIcon,
 } from 'lucide-react';
-import { RECYCLING_ITEMS, MATERIAL_GUIDES } from '@/data/recyclingData';
-import { CLEAN_POINTS, ACHIEVEMENTS, IMPACT_STATS, COMPLEMENTARY_TECH } from '@/data/locations';
-import { MATERIAL_COLORS, MATERIAL_LABELS, type MaterialCategory, type RecyclingItem } from '@/types';
+import { classifyMaterial, RECYCLING_ITEMS, MATERIAL_GUIDES } from '@/data/recyclingData';
+import { ACHIEVEMENTS, IMPACT_STATS, COMPLEMENTARY_TECH } from '@/data/locations';
+import { MATERIAL_COLORS, MATERIAL_LABELS, type CleanPoint, type MaterialCategory, type RecyclingItem } from '@/types';
 import { AccessibilityProvider, useAccessibility, type ColorBlindnessMode, type ThemeMode } from '@/context/AccessibilityContext';
 import { useSpeech } from '@/hooks/useSpeech';
 import { useRecyclingLog } from '@/hooks/useRecyclingLog';
@@ -30,7 +30,19 @@ function AppShell() {
   const { logs, addLog, stats } = useRecyclingLog();
   const [selectedItem, setSelectedItem] = useState<RecyclingItem | null>(null);
 
-  const navigate = (next: Tab) => { setTab(next); setMenuOpen(false); window.scrollTo({ top: 0, behavior: 'smooth' }); };
+  useEffect(() => {
+    const current = window.history.state?.tab as Tab | undefined;
+    if (current) setTab(current);
+    else window.history.replaceState({ tab: 'home' }, '', window.location.href);
+    const handlePopState = (event: PopStateEvent) => setTab((event.state?.tab as Tab | undefined) ?? 'home');
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
+
+  const navigate = (next: Tab) => {
+    if (next !== tab) window.history.pushState({ tab: next }, '', `#${next}`);
+    setTab(next); setMenuOpen(false); window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
 
   return (
     <div className="min-h-screen bg-[var(--eco-bg)] text-[var(--eco-text)] transition-colors duration-300">
@@ -100,7 +112,7 @@ function tabLabel(tab: Tab) { return ({ home: 'Inicio', map: 'Mapa', guide: 'Gu�
 
 function HomePage({ onNavigate, selectedItem, setSelectedItem, addLog }: { onNavigate: (t: Tab) => void; selectedItem: RecyclingItem | null; setSelectedItem: (i: RecyclingItem | null) => void; addLog: (item: { itemId: string; itemName: string; category: MaterialCategory; quantity: number }) => void }) {
   const [query, setQuery] = useState(''); const [listening, setListening] = useState(false); const speech = useSpeech();
-  useEffect(() => { if (speech.transcript) setQuery(speech.transcript); }, [speech.transcript]);
+  useEffect(() => { if (speech.transcript) { setQuery(speech.transcript); setSelectedItem(classifyMaterial(speech.transcript)); } }, [speech.transcript, setSelectedItem]);
   const results = useMemo(() => { const q = query.trim().toLowerCase(); return q ? RECYCLING_ITEMS.filter((item) => [item.name, ...item.keywords].some((v) => v.toLowerCase().includes(q))).slice(0, 5) : []; }, [query]);
   const item = selectedItem;
   const speakSteps = () => { if (item) speech.speak(`${item.name}. Paso 1: ${item.steps[0]} Paso 2: ${item.steps[1]} Paso 3: ${item.steps[2]}`); };
@@ -118,14 +130,37 @@ function ResultCard({ item, onSpeak, speech, onLog }: { item: RecyclingItem; onS
 
 function MapPage() {
   const [filter, setFilter] = useState<'all' | MaterialCategory>('all');
+  const [points, setPoints] = useState<CleanPoint[]>([]);
+  const [searching, setSearching] = useState(false);
+  const [searchError, setSearchError] = useState('');
   const { location, status, error, requestLocation } = useGeolocation();
 
+  useEffect(() => {
+    if (!location) return;
+    const controller = new AbortController();
+    setSearching(true);
+    setSearchError('');
+    const query = `[out:json][timeout:20];(nwr[amenity~"recycling|waste_transfer_station"](around:10000,${location.lat},${location.lng});nwr[recycling_type](around:10000,${location.lat},${location.lng}););out center tags;`;
+    fetch(`https://overpass-api.de/api/interpreter?data=${encodeURIComponent(query)}`, { signal: controller.signal })
+      .then((response) => { if (!response.ok) throw new Error('network'); return response.json(); })
+      .then((data) => setPoints((data.elements ?? []).map((element: { id: number; lat?: number; lon?: number; center?: { lat: number; lon: number }; tags?: Record<string, string> }, index: number) => {
+        const tags = element.tags ?? {};
+        const center = element.center ?? { lat: element.lat ?? NaN, lon: element.lon ?? NaN };
+        const name = tags.name || tags.operator || 'Punto de reciclaje registrado';
+        const detected = classifyMaterial(`${tags.recycling_type ?? ''} ${tags.recycling ?? ''} ${name}`);
+        return { id: element.id || index, name, address: tags['addr:street'] ? `${tags['addr:street']} ${tags['addr:housenumber'] ?? ''}` : 'Dirección no disponible', lat: center.lat, lng: center.lon, materials: [detected.category], distance: haversineDistance(location, { lat: center.lat, lng: center.lon }), hours: tags.opening_hours || 'Horario no disponible' };
+      }).filter((point: CleanPoint) => Number.isFinite(point.lat) && Number.isFinite(point.lng))))
+      .catch((requestError: unknown) => { if ((requestError as Error).name !== 'AbortError') setSearchError('No se pudieron consultar los puntos registrados. Inténtalo de nuevo.'); })
+      .finally(() => setSearching(false));
+    return () => controller.abort();
+  }, [location]);
+
   const pointsWithDistance = useMemo(() => {
-    return CLEAN_POINTS.map((p) => ({
+    return points.map((p) => ({
       ...p,
       realDistance: location ? haversineDistance(location, { lat: p.lat, lng: p.lng }) : p.distance,
     })).sort((a, b) => a.realDistance - b.realDistance);
-  }, [location]);
+  }, [location, points]);
 
   const filtered = filter === 'all' ? pointsWithDistance : pointsWithDistance.filter((p) => p.materials.includes(filter));
 
@@ -143,8 +178,9 @@ function MapPage() {
       {status === 'error' && <span className="text-sm text-red-600 dark:text-red-400">{error}</span>}
       {status === 'success' && <span className="text-sm font-semibold text-forest-600 dark:text-forest-400">Ubicación detectada — distancias calculadas</span>}
     </div>
-    <div className="flex gap-2 overflow-x-auto pb-1">{(['all','vidrio','papel','plastico','pilas','raee','metal'] as const).map((f) => <button key={f} onClick={() => setFilter(f)} className={`eco-chip ${filter === f ? 'active' : ''}`}>{f === 'all' ? 'Todos' : MATERIAL_LABELS[f]}</button>)}</div>
-    <div className="grid gap-6 lg:grid-cols-[1.35fr_1fr]"><MapView points={filtered} userLocation={location} /><div className="space-y-3">{filtered.map((point, index) => <div key={point.id} className="eco-card p-4 transition hover:-translate-y-0.5 hover:shadow-md"><div className="flex gap-3"><span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-forest-700 text-sm font-bold text-white">{index + 1}</span><div className="min-w-0 flex-1"><div className="flex items-start justify-between gap-2"><h3 className="font-bold">{point.name}</h3><span className="shrink-0 rounded-full bg-forest-100 px-2 py-1 text-xs font-bold text-forest-800 dark:bg-forest-900 dark:text-forest-200">{formatDistance(point.realDistance)}</span></div><p className="mt-1 flex items-start gap-1 text-sm text-[var(--eco-text-muted)]"><MapPin size={15} className="mt-0.5 shrink-0" />{point.address}</p><p className="mt-2 text-xs text-[var(--eco-text-muted)]">{point.hours}</p><div className="mt-3 flex flex-wrap gap-1.5">{point.materials.slice(0, 5).map((m) => <span key={m} className="rounded-md px-2 py-1 text-[10px] font-semibold" style={{ backgroundColor: `${MATERIAL_COLORS[m]}18`, color: MATERIAL_COLORS[m] }}>{MATERIAL_LABELS[m]}</span>)}</div></div></div></div>)}</div></div>
+    <div className="flex gap-2 overflow-x-auto pb-1">{(['all','vidrio','papel','plastico','pilas','raee','metal','textil','peligroso'] as const).map((f) => <button key={f} onClick={() => setFilter(f)} className={`eco-chip ${filter === f ? 'active' : ''}`}>{f === 'all' ? 'Todos' : MATERIAL_LABELS[f]}</button>)}</div>
+    {searching && <p className="text-sm text-[var(--eco-text-muted)]">Buscando puntos registrados cerca de ti...</p>}{searchError && <p className="text-sm text-red-600">{searchError}</p>}{location && !searching && filtered.length === 0 && <p className="eco-card p-5 text-sm text-[var(--eco-text-muted)]">No encontramos puntos de reciclaje registrados en esta zona.</p>}
+    <div className="grid gap-6 lg:grid-cols-[1.35fr_1fr]"><MapView points={filtered} userLocation={location} /><div className="space-y-3">{filtered.map((point, index) => <div key={point.id} className="eco-card p-4 transition hover:-translate-y-0.5 hover:shadow-md"><div className="flex gap-3"><span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-forest-700 text-sm font-bold text-white">{index + 1}</span><div className="min-w-0 flex-1"><div className="flex items-start justify-between gap-2"><h3 className="font-bold">{point.name}</h3><span className="shrink-0 rounded-full bg-forest-100 px-2 py-1 text-xs font-bold text-forest-800 dark:bg-forest-900 dark:text-forest-200">{formatDistance(point.realDistance)}</span></div><p className="mt-1 flex items-start gap-1 text-sm text-[var(--eco-text-muted)]"><MapPin size={15} className="mt-0.5 shrink-0" />{point.address}</p><p className="mt-2 text-xs text-[var(--eco-text-muted)]">{point.hours}</p><div className="mt-3 flex flex-wrap gap-1.5">{point.materials.map((m) => <span key={m} className="rounded-md px-2 py-1 text-[10px] font-semibold" style={{ backgroundColor: `${MATERIAL_COLORS[m]}18`, color: MATERIAL_COLORS[m] }}>{MATERIAL_LABELS[m]}</span>)}</div><a className="mt-3 inline-flex items-center gap-1 text-sm font-bold text-forest-700" target="_blank" rel="noreferrer" href={`https://www.google.com/maps/dir/?api=1&destination=${point.lat},${point.lng}`}>Cómo llegar <Navigation size={14} /></a></div></div></div>)}</div></div>
   </div>;
 }
 
@@ -187,7 +223,7 @@ function ScannerPage() {
     <CameraScanner />
     <div className="eco-card p-5">
       <h3 className="mb-2 font-bold">¿Cómo funciona?</h3>
-      <p className="text-sm leading-relaxed text-[var(--eco-text-muted)]">El escáner abre la cámara de tu dispositivo. Al tomar una foto, simula la detección automática del material (vidrio, cartón, PET, etc.) y te muestra los 3 pasos de preparación en pantalla y por voz.</p>
+      <p className="text-sm leading-relaxed text-[var(--eco-text-muted)]">El escáner abre la cámara o tu galería y analiza la imagen con MobileNet. La etiqueta reconocida se traduce a una categoría de reciclaje y activa la guía de preparación en pantalla y por voz.</p>
     </div>
   </div>;
 }

@@ -1,4 +1,4 @@
-import type { MaterialGuide, RecyclingItem } from '@/types';
+import type { MaterialCategory, MaterialGuide, RecyclingItem } from '@/types';
 
 export const RECYCLING_ITEMS: RecyclingItem[] = [
   {
@@ -119,6 +119,43 @@ export const RECYCLING_ITEMS: RecyclingItem[] = [
     icon: 'leaf',
   },
 ];
+
+const CATEGORY_SIGNALS: Record<MaterialCategory, string[]> = {
+  organico: ['comida', 'fruta', 'frutas', 'verdura', 'verduras', 'cascara', 'cascaras', 'café', 'te', 'hojas', 'compost', 'resto'],
+  papel: ['papel', 'carton', 'caja', 'pizza', 'periodico', 'revista', 'libro', 'sobre', 'tetra', 'brik'],
+  plastico: ['plastico', 'pet', 'envase', 'bolsa', 'botella', 'yogur', 'envoltorio'],
+  vidrio: ['vidrio', 'frasco', 'frascos', 'tarro', 'tarros', 'botella', 'botellas'],
+  metal: ['metal', 'lata', 'latas', 'atun', 'aluminio', 'hojalata', 'cobre'],
+  raee: ['celular', 'movil', 'telefono', 'cargador', 'cable', 'electronico', 'computador', 'electrodomestico', 'pantalla'],
+  pilas: ['pila', 'pilas', 'bateria', 'baterias'],
+  textil: ['ropa', 'textil', 'tela', 'zapato', 'zapatos', 'zapatilla', 'abrigo'],
+  peligroso: ['pintura', 'solvente', 'quimico', 'tox', 'aceite', 'aerosol', 'medicamento', 'jeringa'],
+};
+
+const normalize = (value: string) => value.toLocaleLowerCase('es').normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+
+export function classifyMaterial(input: string): RecyclingItem {
+  const normalized = normalize(input);
+  const exactItem = RECYCLING_ITEMS
+    .map((item) => ({ item, score: [item.name, ...item.keywords].reduce((score, signal) => score + (normalized.includes(normalize(signal)) ? 3 : 0), 0) }))
+    .sort((a, b) => b.score - a.score)[0];
+  const categoryScores = (Object.keys(CATEGORY_SIGNALS) as MaterialCategory[]).map((category) => ({
+    category,
+    score: CATEGORY_SIGNALS[category].reduce((score, signal) => score + (normalized.includes(normalize(signal)) ? 1 : 0), 0),
+  })).sort((a, b) => b.score - a.score);
+  const category = categoryScores[0]?.score ? categoryScores[0].category : exactItem?.item.category ?? 'peligroso';
+  if (exactItem?.score) return exactItem.item;
+  const guide = MATERIAL_GUIDES.find((entry) => entry.category === category);
+  return {
+    id: `consulta-${normalize(input).replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'residuo'}`,
+    name: input.trim() || 'Residuo sin nombre',
+    category,
+    keywords: [],
+    steps: guide ? [guide.instructions.separation, guide.instructions.limpieza, guide.instructions.compactacion] : ['Consulta la normativa local antes de desecharlo.', 'Mantén el residuo separado y manipúlalo con cuidado.', 'Llévalo a un punto autorizado para su categoría.'],
+    tip: guide ? `Antes de reciclarlo, revisa las indicaciones para ${guide.title.toLocaleLowerCase('es')}.` : 'Los residuos peligrosos deben entregarse en un punto autorizado; nunca los mezcles con la basura común.',
+    icon: guide?.icon ?? 'shield',
+  };
+}
 
 export const MATERIAL_GUIDES: MaterialGuide[] = [
   {
