@@ -256,4 +256,32 @@ export const MATERIAL_GUIDES: MaterialGuide[] = [
     examples: ['Pilas AA', 'Pilas AAA', 'Pilas de botón', 'Baterías de litio', 'Baterías de celular'],
     notRecyclable: ['Pilas dañadas con fugas (manejo especial)', 'Baterías industriales de plomo-ácido'],
   },
+  {
+    category: 'textil',
+    title: 'Textiles',
+    icon: 'package',
+    color: '#8e24aa',
+    description: 'Ropa, calzado y telas que pueden reutilizarse o recuperarse.',
+    instructions: {
+      separation: 'Separa ropa, calzado y telas de otros residuos. Prioriza donar o reparar las prendas en buen estado.',
+      limpieza: 'Lava y seca las prendas antes de entregarlas. Ata los pares de zapatos para que no se separen.',
+      compactacion: 'Guarda los textiles secos en una bolsa cerrada y no los mezcles con residuos húmedos.',
+    },
+    examples: ['Ropa', 'Zapatos', 'Toallas', 'Sábanas', 'Retazos de tela'],
+    notRecyclable: ['Textiles mojados', 'Prendas con sustancias químicas', 'Telas con moho'],
+  },
+  {
+    category: 'peligroso',
+    title: 'Residuos Peligrosos',
+    icon: 'shield',
+    color: '#b71c1c',
+    description: 'Materiales que requieren manejo especializado para proteger a las personas y al ambiente.',
+    instructions: {
+      separation: 'Mantén pinturas, solventes, aerosoles, medicamentos y químicos separados de la basura común.',
+      limpieza: 'No mezcles, diluyas ni intentes limpiar estos productos. Conserva sus envases originales cerrados.',
+      compactacion: 'No aplastes ni perfores los envases. Entrégalos en un punto autorizado y sigue sus instrucciones.',
+    },
+    examples: ['Pinturas', 'Solventes', 'Aerosoles', 'Medicamentos vencidos', 'Aceites lubricantes'],
+    notRecyclable: ['Químicos vertidos al desagüe', 'Envases abiertos', 'Materiales mezclados'],
+  },
 ];
