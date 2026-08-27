@@ -8,6 +8,7 @@ import {
 import { classifyMaterial, RECYCLING_ITEMS, MATERIAL_GUIDES } from '@/data/recyclingData';
 import { ACHIEVEMENTS, IMPACT_STATS, COMPLEMENTARY_TECH } from '@/data/locations';
 import { MATERIAL_COLORS, MATERIAL_LABELS, type CleanPoint, type MaterialCategory, type RecyclingItem } from '@/types';
+import { MATERIAL_COLORS, MATERIAL_CONTAINERS, MATERIAL_LABELS, type CleanPoint, type MaterialCategory, type RecyclingItem } from '@/types';
 import { AccessibilityProvider, useAccessibility, type ColorBlindnessMode, type ThemeMode } from '@/context/AccessibilityContext';
 import { useSpeech } from '@/hooks/useSpeech';
 import { useRecyclingLog } from '@/hooks/useRecyclingLog';
@@ -95,7 +96,7 @@ function AppShell() {
             {tab === 'map' && <MapPage />}
             {tab === 'guide' && <GuidePage />}
             {tab === 'achievements' && <AchievementsPage logs={logs} stats={stats} onLog={addLog} />}
-            {tab === 'scanner' && <ScannerPage />}
+            {tab === 'scanner' && <ScannerPage onResult={setSelectedItem} />}
             {tab === 'accessibility' && <AccessibilityPage />}
           </main>
         </div>
@@ -103,7 +104,8 @@ function AppShell() {
 
       {/* Bottom nav - mobile only */}
       <BottomNav tab={tab} onNavigate={navigate} />
-      <EcoMascota onNavigate={(t) => navigate(t)} />
+      <EcoMascota onNavigate={(t) => navigate(t)} detectedItem={selectedItem} />
+    function ResultCard({ item, onSpeak, speech, onLog }: { item: RecyclingItem; onSpeak: () => void; speech: ReturnType<typeof useSpeech>; onLog: () => void }) { return <section className="eco-card animate-slide-up overflow-hidden"><div className="flex flex-col gap-4 border-b border-[var(--eco-border)] bg-[var(--eco-surface)] p-5 sm:flex-row sm:items-center sm:justify-between"><div className="flex items-center gap-4"><span className="flex h-14 w-14 items-center justify-center rounded-2xl bg-white text-forest-700 shadow-sm dark:bg-forest-900 dark:text-forest-300"><Icon name={item.icon} size={28} /></span><div><p className="text-xs font-bold uppercase tracking-wider text-forest-600 dark:text-forest-300">{MATERIAL_LABELS[item.category]}</p><p className="text-xs font-semibold" style={{ color: MATERIAL_COLORS[item.category] }}>{MATERIAL_CONTAINERS[item.category]}</p><h2 className="text-xl font-extrabold">{item.name}</h2></div></div>
     </div>
   );
 }
@@ -217,10 +219,10 @@ function StatCard({ label, value, icon }: { label: string; value: number; icon: 
 function LogForm({ onClose, onLog }: { onClose: () => void; onLog: ReturnType<typeof useRecyclingLog>['addLog'] }) { const [item, setItem] = useState(RECYCLING_ITEMS[0]); const [quantity, setQuantity] = useState(1); return <section className="eco-card animate-scale-in p-5"><div className="mb-4 flex items-center justify-between"><h2 className="font-extrabold">Registrar reciclaje</h2><button onClick={onClose} aria-label="Cerrar"><X /></button></div><div className="grid gap-3 sm:grid-cols-[1fr_120px_auto]"><select className="eco-input" value={item.id} onChange={(e) => setItem(RECYCLING_ITEMS.find((i) => i.id === e.target.value) ?? RECYCLING_ITEMS[0])}>{RECYCLING_ITEMS.map((i) => <option key={i.id} value={i.id}>{i.name}</option>)}</select><input className="eco-input" type="number" min={1} max={100} value={quantity} onChange={(e) => setQuantity(Math.max(1, Number(e.target.value)))} aria-label="Cantidad" /><button className="eco-btn" onClick={() => { onLog({ itemId: item.id, itemName: item.name, category: item.category, quantity }); onClose(); }}><Check size={17} /> Guardar</button></div></section>; }
 function ImpactSection() { return <section><div className="mb-4"><p className="text-sm font-semibold uppercase tracking-wider text-forest-600 dark:text-forest-400">El cambio que construimos</p><h2 className="mt-1 text-2xl font-extrabold">De la duda a la acción</h2></div><div className="grid gap-4 md:grid-cols-2"><div className="rounded-2xl border border-red-200 bg-red-50 p-5 dark:border-red-900 dark:bg-red-950/30"><h3 className="mb-4 flex items-center gap-2 font-extrabold text-red-900 dark:text-red-100"><CircleHelp size={20} />{IMPACT_STATS.current.title}</h3>{IMPACT_STATS.current.problems.map((p) => <p key={p.text} className="mb-3 flex gap-3 text-sm text-red-900/80 dark:text-red-100/80"><Icon name={p.icon} size={18} />{p.text}</p>)}</div><div className="rounded-2xl border border-forest-200 bg-forest-50 p-5 dark:border-forest-800 dark:bg-forest-950/30"><h3 className="mb-4 flex items-center gap-2 font-extrabold text-forest-900 dark:text-forest-100"><CheckCircle2 size={20} />{IMPACT_STATS.projected.title}</h3>{IMPACT_STATS.projected.benefits.map((p) => <p key={p.text} className="mb-3 flex gap-3 text-sm text-forest-900/80 dark:text-forest-100/80"><Icon name={p.icon} size={18} />{p.text}</p>)}</div></div><div className="mt-5 grid gap-4 md:grid-cols-3">{COMPLEMENTARY_TECH.map((x) => <div className="eco-card p-5" key={x.title}><span className="mb-3 flex h-10 w-10 items-center justify-center rounded-xl bg-mint-100 text-mint-700 dark:bg-mint-900 dark:text-mint-300"><Icon name={x.icon} /></span><h3 className="font-bold">{x.title}</h3><p className="mt-2 text-sm leading-relaxed text-[var(--eco-text-muted)]">{x.description}</p></div>)}</div></section>; }
 
-function ScannerPage() {
+function ScannerPage({ onResult }: { onResult: (item: RecyclingItem) => void }) {
   return <div className="animate-fade-in space-y-7">
     <PageIntro eyebrow="Detecta y recicla" title="Escáner de residuos" text="Apunta con la cámara de tu dispositivo al residuo y te diremos qué material es y cómo prepararlo." icon={<Camera size={26} />} />
-    <CameraScanner />
+    <CameraScanner onResult={onResult} />
     <div className="eco-card p-5">
       <h3 className="mb-2 font-bold">¿Cómo funciona?</h3>
       <p className="text-sm leading-relaxed text-[var(--eco-text-muted)]">El escáner abre la cámara o tu galería y analiza la imagen con MobileNet. La etiqueta reconocida se traduce a una categoría de reciclaje y activa la guía de preparación en pantalla y por voz.</p>

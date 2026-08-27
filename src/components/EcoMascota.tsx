@@ -2,13 +2,14 @@ import { useState, useEffect, useRef } from 'react';
 import { useAccessibility } from '@/context/AccessibilityContext';
 import { useSpeech } from '@/hooks/useSpeech';
 import { useRecyclingLog } from '@/hooks/useRecyclingLog';
-import { RECYCLING_ITEMS } from '@/data/recyclingData';
-import { MATERIAL_LABELS, type RecyclingItem } from '@/types';
+import { classifyMaterial } from '@/data/recyclingData';
+import { MATERIAL_CONTAINERS, MATERIAL_LABELS, type RecyclingItem } from '@/types';
+import { MATERIAL_COLORS, MATERIAL_CONTAINERS, MATERIAL_LABELS, type RecyclingItem } from '@/types';
 import { X, Mic, Search, Camera, BookOpen, Map, Trophy, Volume2, Square, Sparkles, Leaf, Recycle, Zap } from 'lucide-react';
 
 type MascotMode = 'idle' | 'chat' | 'search' | 'result';
 
-export function EcoMascota({ onNavigate }: { onNavigate: (tab: 'home' | 'map' | 'guide' | 'achievements' | 'scanner') => void }) {
+export function EcoMascota({ onNavigate, detectedItem }: { onNavigate: (tab: 'home' | 'map' | 'guide' | 'achievements' | 'scanner') => void; detectedItem?: RecyclingItem | null }) {
   const { speak, stopSpeaking, isSpeaking } = useAccessibility();
   const { startListening, stopListening, isListening, transcript } = useSpeech();
   const { stats } = useRecyclingLog();
@@ -37,21 +38,24 @@ export function EcoMascota({ onNavigate }: { onNavigate: (tab: 'home' | 'map' | 
     }
   }, [transcript]);
 
+  useEffect(() => {
+    if (!detectedItem) return;
+    setFoundItem(detectedItem);
+    setOpen(true);
+    setMode('result');
+    setBubbleText(`Detecté ${detectedItem.name}. Te explico cómo prepararlo y reutilizarlo.`);
+    speak(`Detecté ${detectedItem.name}. Categoría: ${MATERIAL_LABELS[detectedItem.category]}. ${MATERIAL_CONTAINERS[detectedItem.category]}. ${detectedItem.steps.join(' ')} ${detectedItem.upcycling ?? detectedItem.tip}`);
+  }, [detectedItem, speak]);
+
   const searchItem = (q: string) => {
     const query = q.trim().toLowerCase();
     if (!query) return;
-    const found = RECYCLING_ITEMS.find((item) =>
-      [item.name, ...item.keywords].some((v) => v.toLowerCase().includes(query)),
-    );
+    const found = classifyMaterial(q);
     if (found) {
       setFoundItem(found);
       setMode('result');
       setBubbleText(`¡Encontré ${found.name}! Te explico cómo reciclarlo.`);
-      speak(`¡Encontré ${found.name}! Aquí tienes los pasos. Paso 1: ${found.steps[0]} Paso 2: ${found.steps[1]} Paso 3: ${found.steps[2]}`);
-    } else {
-      setBubbleText(`No reconocí "${q}". Intenta con: botella, cartón, pila, vidrio...`);
-      speak(`No reconocí ese residuo. Intenta decir botella, cartón, pila o vidrio.`);
-      setMode('chat');
+      speak(`¡Encontré ${found.name}! Categoría: ${MATERIAL_LABELS[found.category]}. ${MATERIAL_CONTAINERS[found.category]}. ${found.steps.join(' ')} ${found.upcycling ?? found.tip}`);
     }
   };
 
@@ -237,6 +241,7 @@ export function EcoMascota({ onNavigate }: { onNavigate: (tab: 'home' | 'map' | 
                       {MATERIAL_LABELS[foundItem.category]}
                     </p>
                     <h3 className="font-extrabold">{foundItem.name}</h3>
+                    <p className="text-xs font-semibold" style={{ color: MATERIAL_COLORS[foundItem.category] }}>{MATERIAL_CONTAINERS[foundItem.category]}</p>
                   </div>
                 </div>
 
@@ -253,6 +258,9 @@ export function EcoMascota({ onNavigate }: { onNavigate: (tab: 'home' | 'map' | 
 
                 <div className="rounded-xl bg-amber-50 p-3 text-xs text-amber-900 dark:bg-amber-950/40 dark:text-amber-100">
                   <strong>Dato Eco:</strong> {foundItem.tip}
+                </div>
+                <div className="rounded-xl bg-forest-50 p-3 text-xs text-forest-900 dark:bg-forest-950/40 dark:text-forest-100">
+                  <strong>Reutilización:</strong> {foundItem.upcycling ?? 'Reutilízalo o dónalo antes de reciclarlo si está en buen estado.'}
                 </div>
 
                 <div className="flex gap-2">

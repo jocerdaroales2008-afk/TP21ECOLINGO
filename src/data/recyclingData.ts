@@ -153,6 +153,7 @@ export function classifyMaterial(input: string): RecyclingItem {
     keywords: [],
     steps: guide ? [guide.instructions.separation, guide.instructions.limpieza, guide.instructions.compactacion] : ['Consulta la normativa local antes de desecharlo.', 'Mantén el residuo separado y manipúlalo con cuidado.', 'Llévalo a un punto autorizado para su categoría.'],
     tip: guide ? `Antes de reciclarlo, revisa las indicaciones para ${guide.title.toLocaleLowerCase('es')}.` : 'Los residuos peligrosos deben entregarse en un punto autorizado; nunca los mezcles con la basura común.',
+    upcycling: category === 'organico' ? 'Aprovecha los restos para iniciar una compostera.' : category === 'textil' ? 'Repara, dona o transforma la tela en bolsas y paños.' : category === 'peligroso' ? 'Devuelve el producto a un programa autorizado; no lo reutilices fuera de su uso original.' : 'Busca una segunda vida para el objeto antes de enviarlo a reciclar.',
     icon: guide?.icon ?? 'shield',
   };
 }

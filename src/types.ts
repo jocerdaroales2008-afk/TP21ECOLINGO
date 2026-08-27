@@ -16,6 +16,7 @@ export interface RecyclingItem {
   keywords: string[];
   steps: string[];
   tip: string;
+  upcycling?: string;
   icon: string;
 }
 
@@ -85,4 +86,16 @@ export const MATERIAL_COLORS: Record<MaterialCategory, string> = {
   pilas: '#d32f2f',
   textil: '#8e24aa',
   peligroso: '#b71c1c',
+};
+
+export const MATERIAL_CONTAINERS: Record<MaterialCategory, string> = {
+  organico: 'Contenedor café o compostera',
+  papel: 'Contenedor azul',
+  plastico: 'Contenedor amarillo',
+  vidrio: 'Contenedor verde',
+  metal: 'Contenedor gris',
+  raee: 'Punto autorizado para electrónicos',
+  pilas: 'Punto autorizado para pilas',
+  textil: 'Contenedor o punto textil',
+  peligroso: 'Punto autorizado para residuos peligrosos',
 };
