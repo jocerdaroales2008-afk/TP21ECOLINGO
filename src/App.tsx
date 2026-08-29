@@ -94,6 +94,8 @@ const iconMap: Record<string, LucideIcon> = {
   bell: Bell,
 };
 
+const DEFAULT_FALLBACK_LOCATION = { lat: -33.445, lng: -70.667 };
+
 const LOCAL_FALLBACK_POINTS: CleanPoint[] = [
   {
     id: 1001,
@@ -156,6 +158,15 @@ const LOCAL_FALLBACK_POINTS: CleanPoint[] = [
     hours: 'Lun a Dom • 08:00 - 19:00',
   },
 ];
+
+function buildFallbackPoints(referenceLocation: { lat: number; lng: number } | null): CleanPoint[] {
+  const baseLocation = referenceLocation ?? DEFAULT_FALLBACK_LOCATION;
+
+  return LOCAL_FALLBACK_POINTS.map((point) => ({
+    ...point,
+    distance: haversineDistance(baseLocation, { lat: point.lat, lng: point.lng }),
+  }));
+}
 
 function Icon({ name, size = 20 }: { name: string; size?: number }) {
   const Component = iconMap[name] ?? Recycle;
@@ -567,16 +578,20 @@ function ResultCard({ item, onSpeak, speech, onLog }: { item: RecyclingItem; onS
 
 function MapPage() {
   const [filter, setFilter] = useState<'all' | MaterialCategory>('all');
-  const [points, setPoints] = useState<CleanPoint[]>(LOCAL_FALLBACK_POINTS);
+  const [points, setPoints] = useState<CleanPoint[]>(() => buildFallbackPoints(null));
   const [searching, setSearching] = useState(false);
   const [searchError, setSearchError] = useState('');
-  const [fallbackActive, setFallbackActive] = useState(false);
+  const [fallbackActive, setFallbackActive] = useState(true);
   const { location, status, error, requestLocation } = useGeolocation();
 
   useEffect(() => {
+    const baseLocation = location ?? DEFAULT_FALLBACK_LOCATION;
+    const nextFallbackPoints = buildFallbackPoints(baseLocation);
+
     if (!location) {
-      setPoints(LOCAL_FALLBACK_POINTS);
+      setPoints(nextFallbackPoints);
       setFallbackActive(true);
+      setSearchError('');
       setSearching(false);
       return;
     }
@@ -620,13 +635,14 @@ function MapPage() {
           return;
         }
 
-        setPoints(LOCAL_FALLBACK_POINTS);
+        setPoints(nextFallbackPoints);
         setFallbackActive(true);
       })
       .catch((requestError: unknown) => {
         if ((requestError as Error).name !== 'AbortError') {
-          setPoints(LOCAL_FALLBACK_POINTS);
+          setPoints(nextFallbackPoints);
           setFallbackActive(true);
+          setSearchError('');
         }
       })
       .finally(() => setSearching(false));
