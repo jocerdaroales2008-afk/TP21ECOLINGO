@@ -94,80 +94,6 @@ const iconMap: Record<string, LucideIcon> = {
   bell: Bell,
 };
 
-const DEFAULT_FALLBACK_LOCATION = { lat: -33.445, lng: -70.667 };
-
-const LOCAL_FALLBACK_POINTS: CleanPoint[] = [
-  {
-    id: 1001,
-    name: 'Centro Verde Providencia',
-    address: 'Av. Providencia 245',
-    lat: -33.438,
-    lng: -70.639,
-    materials: ['papel', 'plastico', 'vidrio'],
-    distance: 0,
-    hours: 'Lun a Sab • 08:00 - 18:00',
-  },
-  {
-    id: 1002,
-    name: 'Punto de Reciclaje Ñuñoa',
-    address: 'Av. Irarrázaval 420',
-    lat: -33.456,
-    lng: -70.604,
-    materials: ['metal', 'raee', 'plastico'],
-    distance: 0,
-    hours: 'Lun a Dom • 09:00 - 20:00',
-  },
-  {
-    id: 1003,
-    name: 'Punto Limpio Las Condes',
-    address: 'Av. Apoquindo 3000',
-    lat: -33.394,
-    lng: -70.577,
-    materials: ['vidrio', 'papel', 'textil'],
-    distance: 0,
-    hours: 'Lun a Vie • 08:30 - 17:30',
-  },
-  {
-    id: 1004,
-    name: 'Recicla Sur',
-    address: 'Calle San Martín 1180',
-    lat: -33.436,
-    lng: -70.67,
-    materials: ['organico', 'peligroso', 'pilas'],
-    distance: 0,
-    hours: 'Mar a Dom • 10:00 - 19:00',
-  },
-  {
-    id: 1005,
-    name: 'EcoCentro San Miguel',
-    address: 'Av. Departamental 770',
-    lat: -33.494,
-    lng: -70.652,
-    materials: ['metal', 'papel', 'vidrio'],
-    distance: 0,
-    hours: 'Lun a Sab • 09:00 - 18:00',
-  },
-  {
-    id: 1006,
-    name: 'Punto Verde Maipú',
-    address: 'Av. Pajaritos 1200',
-    lat: -33.516,
-    lng: -70.756,
-    materials: ['plastico', 'textil', 'raee'],
-    distance: 0,
-    hours: 'Lun a Dom • 08:00 - 19:00',
-  },
-];
-
-function buildFallbackPoints(referenceLocation: { lat: number; lng: number } | null): CleanPoint[] {
-  const baseLocation = referenceLocation ?? DEFAULT_FALLBACK_LOCATION;
-
-  return LOCAL_FALLBACK_POINTS.map((point) => ({
-    ...point,
-    distance: haversineDistance(baseLocation, { lat: point.lat, lng: point.lng }),
-  }));
-}
-
 function Icon({ name, size = 20 }: { name: string; size?: number }) {
   const Component = iconMap[name] ?? Recycle;
   return <Component size={size} strokeWidth={1.9} />;
@@ -578,20 +504,20 @@ function ResultCard({ item, onSpeak, speech, onLog }: { item: RecyclingItem; onS
 
 function MapPage() {
   const [filter, setFilter] = useState<'all' | MaterialCategory>('all');
-  const [points, setPoints] = useState<CleanPoint[]>(() => buildFallbackPoints(null));
+  const [points, setPoints] = useState<CleanPoint[]>([]);
   const [searching, setSearching] = useState(false);
   const [searchError, setSearchError] = useState('');
-  const [fallbackActive, setFallbackActive] = useState(true);
+  const [fallbackActive, setFallbackActive] = useState(false);
   const { location, status, error, requestLocation } = useGeolocation();
 
   useEffect(() => {
-    const baseLocation = location ?? DEFAULT_FALLBACK_LOCATION;
-    const nextFallbackPoints = buildFallbackPoints(baseLocation);
+    requestLocation();
+  }, [requestLocation]);
 
+  useEffect(() => {
     if (!location) {
-      setPoints(nextFallbackPoints);
-      setFallbackActive(true);
-      setSearchError('');
+      setPoints([]);
+      setFallbackActive(false);
       setSearching(false);
       return;
     }
@@ -629,20 +555,14 @@ function MapPage() {
           })
           .filter((point) => Number.isFinite(point.lat) && Number.isFinite(point.lng));
 
-        if (nextPoints.length > 0) {
-          setPoints(nextPoints);
-          setFallbackActive(false);
-          return;
-        }
-
-        setPoints(nextFallbackPoints);
-        setFallbackActive(true);
+        setPoints(nextPoints);
+        setFallbackActive(false);
       })
       .catch((requestError: unknown) => {
         if ((requestError as Error).name !== 'AbortError') {
-          setPoints(nextFallbackPoints);
-          setFallbackActive(true);
-          setSearchError('');
+          setPoints([]);
+          setFallbackActive(false);
+          setSearchError('No se pudieron consultar los puntos cercanos en tu ubicación.');
         }
       })
       .finally(() => setSearching(false));
@@ -683,8 +603,8 @@ function MapPage() {
       </div>
 
       {searching && <p className="text-sm text-[var(--eco-text-muted)]">Buscando puntos registrados cerca de ti...</p>}
-      {!fallbackActive && searchError && <p className="text-sm text-red-600">{searchError}</p>}
-      {!fallbackActive && location && !searching && filtered.length === 0 && <p className="eco-card p-5 text-sm text-[var(--eco-text-muted)]">No encontramos puntos de reciclaje registrados en esta zona.</p>}
+      {searchError && <p className="text-sm text-red-600">{searchError}</p>}
+      {!searching && location && filtered.length === 0 && <p className="eco-card p-5 text-sm text-[var(--eco-text-muted)]">No encontramos puntos de reciclaje registrados en esta zona.</p>}
 
       <div className="grid gap-6 lg:grid-cols-[1.35fr_1fr]">
         <MapView points={filtered} userLocation={location} onUseLocation={requestLocation} isLoadingLocation={status === 'loading'} locationError={status === 'error' ? error : null} />
