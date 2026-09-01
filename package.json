@@ -7,6 +7,7 @@
     "dev": "vite --host 0.0.0.0",
     "build": "vite build",
     "lint": "eslint .",
+    "seed:mma": "node seed_mma_chile.js",
     "preview": "vite preview --host 0.0.0.0",
     "typecheck": "tsc --noEmit -p tsconfig.app.json"
   },
@@ -16,6 +17,7 @@
     "@tensorflow/tfjs": "^4.22.0",
     "leaflet": "^1.9.4",
     "lucide-react": "^0.446.0",
+    "node-fetch": "^3.3.2",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-router-dom": "^6.28.0"

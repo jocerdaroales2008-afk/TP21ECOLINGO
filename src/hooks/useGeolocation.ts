@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 
 export interface GeoLocation {
   lat: number;
@@ -11,6 +11,7 @@ export function useGeolocation() {
   const [location, setLocation] = useState<GeoLocation | null>(null);
   const [status, setStatus] = useState<GeoStatus>('idle');
   const [error, setError] = useState<string>('');
+  const watchIdRef = useRef<number | null>(null);
 
   const requestLocation = useCallback(() => {
     if (typeof navigator === 'undefined' || !navigator.geolocation) {
@@ -22,7 +23,9 @@ export function useGeolocation() {
     setStatus('loading');
     setError('');
 
-    navigator.geolocation.getCurrentPosition(
+    if (watchIdRef.current !== null) navigator.geolocation.clearWatch(watchIdRef.current);
+
+    watchIdRef.current = navigator.geolocation.watchPosition(
       (pos) => {
         setLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude });
         setStatus('success');
@@ -36,8 +39,12 @@ export function useGeolocation() {
         };
         setError(messages[err.code] || 'Error al obtener la ubicación.');
       },
-      { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 },
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 10000 },
     );
+  }, []);
+
+  useEffect(() => () => {
+    if (watchIdRef.current !== null) navigator.geolocation.clearWatch(watchIdRef.current);
   }, []);
 
   return { location, status, error, requestLocation };

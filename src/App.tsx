@@ -61,6 +61,7 @@ import { CameraScanner } from '@/components/CameraScanner';
 import { MapView } from '@/components/MapView';
 import { SpeakButton } from '@/components/SpeakButton';
 import { saveCommunitySuggestion } from '@/services/communitySuggestions';
+import { getOfficialRecyclingPoints } from '@/services/officialRecyclingPoints';
 
 type Tab = 'home' | 'map' | 'guide' | 'achievements' | 'accessibility' | 'scanner';
 
@@ -516,61 +517,16 @@ function MapPage() {
   const { location, status, error, requestLocation } = useGeolocation();
 
   useEffect(() => {
-    if (!location) {
-      setPoints([]);
-      setSearching(false);
-      return;
-    }
-
-    const controller = new AbortController();
     setSearching(true);
     setSearchError('');
-
-    const radiusMeters = 30000;
-    const query = `[out:json][timeout:25];(
-      node(around:${radiusMeters},${location.lat},${location.lng})["amenity"="recycling"];
-      way(around:${radiusMeters},${location.lat},${location.lng})["amenity"="recycling"];
-    );out center;`;
-
-    fetch(`https://overpass-api.de/api/interpreter?data=${encodeURIComponent(query)}`, { signal: controller.signal })
-      .then((response) => {
-        if (!response.ok) throw new Error('network');
-        return response.json();
-      })
-      .then((data) => {
-        const nextPoints: CleanPoint[] = (data.elements ?? [])
-          .map((element: { id: number; lat?: number; lon?: number; center?: { lat: number; lon: number }; tags?: Record<string, string> }, index: number) => {
-            const tags = element.tags ?? {};
-            const center = element.center ?? { lat: element.lat ?? NaN, lon: element.lon ?? NaN };
-            const name = tags.name || tags.operator || 'Punto de reciclaje';
-            const materialTag = tags.recycling_type || tags.recycling || 'Reciclaje general';
-            const detected = classifyMaterial(`${materialTag} ${name}`);
-            return {
-              id: element.id || index,
-              name,
-              address: tags['addr:street'] ? `${tags['addr:street']} ${tags['addr:housenumber'] ?? ''}`.trim() : 'Ubicación detectada en mapa',
-              lat: center.lat,
-              lng: center.lon,
-              materials: [detected.category],
-              distance: haversineDistance(location, { lat: center.lat, lng: center.lon }),
-              hours: tags.opening_hours || 'Horario no disponible',
-            } satisfies CleanPoint;
-          })
-          .filter((point: CleanPoint) => Number.isFinite(point.lat) && Number.isFinite(point.lng))
-          .sort((a: CleanPoint, b: CleanPoint) => a.distance - b.distance);
-
-        setPoints(nextPoints);
-      })
+    getOfficialRecyclingPoints()
+      .then(setPoints)
       .catch((requestError: unknown) => {
-        if ((requestError as Error).name !== 'AbortError') {
-          setPoints([]);
-          setSearchError('No se pudieron consultar los puntos cercanos en tu ubicación.');
-        }
+        setPoints([]);
+        setSearchError(requestError instanceof Error ? requestError.message : 'No se pudieron cargar los puntos oficiales.');
       })
       .finally(() => setSearching(false));
-
-    return () => controller.abort();
-  }, [location]);
+  }, []);
 
   const pointsWithDistance = useMemo(() => {
     return points
@@ -607,12 +563,12 @@ function MapPage() {
         ))}
       </div>
 
-      {searching && <p className="text-sm text-[var(--eco-text-muted)]">Buscando puntos registrados cerca de ti...</p>}
+      {searching && <p className="text-sm text-[var(--eco-text-muted)]">Cargando puntos oficiales del MMA...</p>}
       {status === 'error' && error && <p className="text-sm text-red-600">{error}</p>}
       {searchError && <p className="text-sm text-red-600">{searchError}</p>}
       {!searching && location && filtered.length === 0 && <p className="eco-card p-5 text-sm text-[var(--eco-text-muted)]">No encontramos puntos de reciclaje registrados en esta zona.</p>}
-      {!location && status !== 'loading' && !searchError && (
-        <p className="eco-card p-5 text-sm text-[var(--eco-text-muted)]">Activa tu ubicación para ver los puntos limpios más cercanos a ti.</p>
+      {!location && status !== 'loading' && !searchError && !searching && (
+        <p className="eco-card p-5 text-sm text-[var(--eco-text-muted)]">Activa tu ubicación para ordenar los puntos por cercanía y mantener tu posición actualizada.</p>
       )}
 
       <div className="grid gap-6 lg:grid-cols-[1.35fr_1fr]">
