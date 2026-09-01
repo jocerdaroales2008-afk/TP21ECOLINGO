@@ -9,6 +9,24 @@ interface SpeechState {
   supported: boolean;
 }
 
+interface SpeechRecognitionResultEvent extends Event {
+  results: { [index: number]: { [index: number]: { transcript: string } } };
+}
+
+interface SpeechRecognitionLike {
+  lang: string;
+  continuous: boolean;
+  interimResults: boolean;
+  onresult: ((event: SpeechRecognitionResultEvent) => void) | null;
+  onerror: (() => void) | null;
+  onend: (() => void) | null;
+  start: () => void;
+  stop: () => void;
+  abort: () => void;
+}
+
+type SpeechRecognitionConstructor = new () => SpeechRecognitionLike;
+
 export function useSpeech() {
   const { speechRate, autoSpeak, speak, stopSpeaking, isSpeaking } = useAccessibility();
   const [state, setState] = useState<SpeechState>({
@@ -19,16 +37,20 @@ export function useSpeech() {
     supported: false,
   });
 
-  const recognitionRef = useRef<any>(null);
+  const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
 
   useEffect(() => {
-    const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    const speechWindow = window as Window & {
+      SpeechRecognition?: SpeechRecognitionConstructor;
+      webkitSpeechRecognition?: SpeechRecognitionConstructor;
+    };
+    const SR = speechWindow.SpeechRecognition || speechWindow.webkitSpeechRecognition;
     if (SR) {
       const rec = new SR();
       rec.lang = 'es-ES';
       rec.continuous = false;
       rec.interimResults = false;
-      rec.onresult = (e: any) => {
+      rec.onresult = (e: SpeechRecognitionResultEvent) => {
         const transcript = e.results[0][0].transcript;
         setState((s) => ({ ...s, transcript, isListening: false }));
       };

@@ -1,4 +1,4 @@
-﻿import { useEffect, useMemo, useState, type ReactNode } from 'react';
+﻿import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from 'react';
 import {
   Accessibility,
   Award,
@@ -60,6 +60,7 @@ import { EcoMascota } from '@/components/EcoMascota';
 import { CameraScanner } from '@/components/CameraScanner';
 import { MapView } from '@/components/MapView';
 import { SpeakButton } from '@/components/SpeakButton';
+import { saveCommunitySuggestion } from '@/services/communitySuggestions';
 
 type Tab = 'home' | 'map' | 'guide' | 'achievements' | 'accessibility' | 'scanner';
 
@@ -99,6 +100,14 @@ function Icon({ name, size = 20 }: { name: string; size?: number }) {
   return <Component size={size} strokeWidth={1.9} />;
 }
 
+function EcolingoLogo() {
+  return (
+    <span className="ecolingo-logo-mark" aria-hidden="true">
+      <Leaf size={24} strokeWidth={2.4} />
+    </span>
+  );
+}
+
 function AppShell() {
   const [tab, setTab] = useState<Tab>('home');
   const [menuOpen, setMenuOpen] = useState(false);
@@ -130,9 +139,7 @@ function AppShell() {
       <div className="flex">
         <aside className="sticky top-0 hidden h-screen w-64 shrink-0 border-r border-[var(--eco-border)] bg-[var(--eco-card)] p-5 lg:flex lg:flex-col">
           <button onClick={() => navigate('home')} className="mb-8 flex items-center gap-3 text-left" aria-label="Inicio">
-            <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-forest-800 text-white shadow-sm">
-              <Recycle size={24} />
-            </span>
+            <EcolingoLogo />
             <span>
               <span className="block text-lg font-extrabold tracking-tight text-forest-900 dark:text-forest-100">
                 Eco<span className="text-forest-600 dark:text-forest-400">Lingo</span>
@@ -188,9 +195,7 @@ function AppShell() {
           <header className="sticky top-0 z-40 border-b border-[var(--eco-border)] bg-[var(--eco-bg)]/95 backdrop-blur-md lg:hidden">
             <div className="mx-auto flex h-[72px] max-w-7xl items-center justify-between px-5 sm:px-8">
               <button onClick={() => navigate('home')} className="flex items-center gap-3 text-left" aria-label="Ir al inicio">
-                <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-forest-800 text-white shadow-sm">
-                  <Recycle size={24} />
-                </span>
+                <EcolingoLogo />
                 <span>
                   <span className="block text-lg font-extrabold tracking-tight text-forest-900 dark:text-forest-100">
                     Eco<span className="text-forest-600 dark:text-forest-400">Lingo</span>
@@ -507,11 +512,8 @@ function MapPage() {
   const [points, setPoints] = useState<CleanPoint[]>([]);
   const [searching, setSearching] = useState(false);
   const [searchError, setSearchError] = useState('');
+  const [suggestionOpen, setSuggestionOpen] = useState(false);
   const { location, status, error, requestLocation } = useGeolocation();
-
-  useEffect(() => {
-    requestLocation();
-  }, [requestLocation]);
 
   useEffect(() => {
     if (!location) {
@@ -536,7 +538,7 @@ function MapPage() {
         return response.json();
       })
       .then((data) => {
-        const nextPoints = (data.elements ?? [])
+        const nextPoints: CleanPoint[] = (data.elements ?? [])
           .map((element: { id: number; lat?: number; lon?: number; center?: { lat: number; lon: number }; tags?: Record<string, string> }, index: number) => {
             const tags = element.tags ?? {};
             const center = element.center ?? { lat: element.lat ?? NaN, lon: element.lon ?? NaN };
@@ -554,8 +556,8 @@ function MapPage() {
               hours: tags.opening_hours || 'Horario no disponible',
             } satisfies CleanPoint;
           })
-          .filter((point) => Number.isFinite(point.lat) && Number.isFinite(point.lng))
-          .sort((a, b) => a.distance - b.distance);
+          .filter((point: CleanPoint) => Number.isFinite(point.lat) && Number.isFinite(point.lng))
+          .sort((a: CleanPoint, b: CleanPoint) => a.distance - b.distance);
 
         setPoints(nextPoints);
       })
@@ -590,6 +592,9 @@ function MapPage() {
           {status === 'loading' ? <span className="animate-spin"><Navigation size={18} /></span> : <Navigation size={18} />}
           Usar mi ubicación actual
         </button>
+        <button onClick={() => setSuggestionOpen(true)} className="eco-btn-outline">
+          <Plus size={18} /> Sugerir Punto Limpio
+        </button>
         {status === 'error' && <span className="text-sm text-red-600 dark:text-red-400">{error}</span>}
         {status === 'success' && <span className="text-sm font-semibold text-forest-600 dark:text-forest-400">Ubicación detectada — distancias calculadas</span>}
       </div>
@@ -611,7 +616,7 @@ function MapPage() {
       )}
 
       <div className="grid gap-6 lg:grid-cols-[1.35fr_1fr]">
-        <MapView points={filtered} userLocation={location} onUseLocation={requestLocation} isLoadingLocation={status === 'loading'} locationError={status === 'error' ? error : null} />
+        <MapView points={filtered} userLocation={location} />
 
         <div className="space-y-3">
           {filtered.map((point, index) => (
@@ -646,6 +651,68 @@ function MapPage() {
           ))}
         </div>
       </div>
+      {suggestionOpen && <SuggestionModal onClose={() => setSuggestionOpen(false)} />}
+    </div>
+  );
+}
+
+function SuggestionModal({ onClose }: { onClose: () => void }) {
+  const [name, setName] = useState('');
+  const [address, setAddress] = useState('');
+  const [coordinates, setCoordinates] = useState('');
+  const [materials, setMaterials] = useState<MaterialCategory[]>(['papel', 'plastico']);
+  const [saving, setSaving] = useState(false);
+  const [feedback, setFeedback] = useState('');
+
+  const toggleMaterial = (material: MaterialCategory) => {
+    setMaterials((current) => current.includes(material) ? current.filter((item) => item !== material) : [...current, material]);
+  };
+
+  const submit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const [latText, lngText] = coordinates.split(',').map((value) => value.trim());
+    const lat = coordinates ? Number(latText) : null;
+    const lng = coordinates ? Number(lngText) : null;
+    if (!name.trim() || !address.trim() || (coordinates && (!Number.isFinite(lat) || !Number.isFinite(lng)))) {
+      setFeedback('Completa nombre, dirección y coordenadas con el formato latitud, longitud.');
+      return;
+    }
+    setSaving(true);
+    setFeedback('');
+    try {
+      await saveCommunitySuggestion({ name: name.trim(), address: address.trim(), lat, lng, materials });
+      setFeedback('Sugerencia enviada para revisión. ¡Gracias por participar!');
+      setName('');
+      setAddress('');
+      setCoordinates('');
+    } catch (error) {
+      setFeedback(error instanceof Error ? error.message : 'No se pudo enviar la sugerencia.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" role="dialog" aria-modal="true" aria-labelledby="suggestion-title">
+      <form onSubmit={submit} className="w-full max-w-lg space-y-4 rounded-2xl bg-[var(--eco-card)] p-5 shadow-2xl">
+        <div className="flex items-center justify-between gap-4">
+          <h2 id="suggestion-title" className="text-xl font-extrabold">Sugerir Punto Limpio</h2>
+          <button type="button" onClick={onClose} className="rounded-lg p-2" aria-label="Cerrar sugerencia"><X size={20} /></button>
+        </div>
+        <input className="eco-input" required value={name} onChange={(event) => setName(event.target.value)} placeholder="Nombre del lugar" />
+        <input className="eco-input" required value={address} onChange={(event) => setAddress(event.target.value)} placeholder="Dirección" />
+        <input className="eco-input" value={coordinates} onChange={(event) => setCoordinates(event.target.value)} placeholder="Coordenadas opcionales: -33.45, -70.66" />
+        <fieldset>
+          <legend className="mb-2 text-sm font-bold">Materiales aceptados</legend>
+          <div className="flex flex-wrap gap-2">
+            {(['papel', 'plastico', 'vidrio', 'metal', 'organico', 'raee', 'pilas', 'textil'] as MaterialCategory[]).map((material) => (
+              <button type="button" key={material} onClick={() => toggleMaterial(material)} className={`eco-chip ${materials.includes(material) ? 'active' : ''}`} aria-pressed={materials.includes(material)}>{MATERIAL_LABELS[material]}</button>
+            ))}
+          </div>
+        </fieldset>
+        {feedback && <p className="text-sm text-[var(--eco-text-muted)]" role="status">{feedback}</p>}
+        <button type="submit" disabled={saving} className="eco-btn w-full">{saving ? 'Enviando...' : 'Enviar sugerencia'}</button>
+      </form>
     </div>
   );
 }
@@ -938,7 +1005,7 @@ function AccessibilityPage() {
         </SettingCard>
 
         <SettingCard title="Lectura por voz" description="Escucha las instrucciones en voz alta">
-          <Toggle checked={settings.autoSpeak} onChange={settings.setAutoSpeak} label="Activar lectura automática" />
+          <Toggle checked={settings.autoSpeak} onChange={settings.setAutoSpeak} label="Modo Accesibilidad (Lectura por voz / TTS)" />
           <div className="mt-4">
             <label className="mb-2 block text-sm font-semibold">Velocidad: {settings.speechRate.toFixed(1)}x</label>
             <input className="w-full accent-forest-700" type="range" min="0.5" max="2.0" step="0.1" value={settings.speechRate} onChange={(event) => settings.setSpeechRate(Number(event.target.value))} />
@@ -999,7 +1066,7 @@ function ChoiceButton({ active, onClick, label }: { active: boolean; onClick: ()
 
 function Toggle({ checked, onChange, label }: { checked: boolean; onChange: (value: boolean) => void; label: string }) {
   return (
-    <button className="flex w-full items-center justify-between text-left" onClick={() => onChange(!checked)}>
+    <button className="flex w-full items-center justify-between text-left" onClick={() => onChange(!checked)} role="switch" aria-checked={checked} aria-label={label}>
       <span className="font-semibold">{label}</span>
       <span className={`toggle-switch relative h-7 w-12 rounded-full transition ${checked ? 'bg-forest-700' : 'bg-gray-300 dark:bg-gray-600'}`}>
         <span className={`absolute top-1 h-5 w-5 rounded-full bg-white shadow transition ${checked ? 'left-6' : 'left-1'}`} />

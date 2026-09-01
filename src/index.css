@@ -190,6 +190,24 @@
     color: #ffffff;
     border-color: var(--eco-primary);
   }
+
+  .ecolingo-logo-mark {
+    display: flex;
+    height: 2.75rem;
+    width: 2.75rem;
+    align-items: center;
+    justify-content: center;
+    border: 3px solid #bbf7d0;
+    border-radius: 1rem 1rem 1rem 0.35rem;
+    background: #166534;
+    color: #dcfce7;
+    box-shadow: 0 4px 10px rgb(22 101 52 / 20%);
+    transform: rotate(-8deg);
+  }
+
+  .ecolingo-logo-mark svg {
+    transform: rotate(8deg);
+  }
 }
 
 /* Leaflet map dark mode */
@@ -204,7 +222,36 @@
 }
 
 .leaflet-container {
-  font-family: 'Inter', system-ui, sans-serif !important;
+  font-family: inherit !important;
+}
+
+.map-shell {
+  overflow: hidden;
+  border: 1px solid var(--eco-border);
+  border-radius: 1rem;
+  background: var(--eco-surface);
+}
+
+.user-location-marker {
+  width: 20px;
+  height: 20px;
+  border: 3px solid #fff;
+  border-radius: 50%;
+  background: #2563eb;
+  box-shadow: 0 0 0 8px rgb(37 99 235 / 18%), 0 2px 8px rgb(0 0 0 / 30%);
+}
+
+.recycling-popup {
+  display: grid;
+  gap: 0.35rem;
+  min-width: 170px;
+  color: #173b2a;
+}
+
+.recycling-popup a {
+  color: #176b42;
+  font-weight: 700;
+  text-decoration: underline;
 }
 
 /* Daltonism simulation filters */

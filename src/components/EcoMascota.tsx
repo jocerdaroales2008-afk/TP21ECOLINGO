@@ -1,11 +1,11 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { BookOpen, Camera, Leaf, Map, Mic, Recycle, Search, Sparkles, Square, Trophy, Volume2, X, Zap } from 'lucide-react';
+import { BookOpen, Camera, Map, Mic, Recycle, Search, Trophy, Volume2, X, Zap } from 'lucide-react';
 
 import { classifyMaterial } from '@/data/recyclingData';
 import { useAccessibility } from '@/context/AccessibilityContext';
 import { useRecyclingLog } from '@/hooks/useRecyclingLog';
 import { useSpeech } from '@/hooks/useSpeech';
-import { MATERIAL_COLORS, MATERIAL_CONTAINERS, MATERIAL_LABELS, type RecyclingItem } from '@/types';
+import { MATERIAL_CONTAINERS, MATERIAL_LABELS, type RecyclingItem } from '@/types';
 
 type MascotMode = 'idle' | 'chat' | 'search' | 'result';
 type MascotTab = 'home' | 'map' | 'guide' | 'achievements' | 'scanner' | 'accessibility';
@@ -16,7 +16,7 @@ interface EcoMascotaProps {
 }
 
 export function EcoMascota({ onNavigate, detectedItem }: EcoMascotaProps) {
-  const { speak, stopSpeaking, isSpeaking } = useAccessibility();
+  const { speak, stopSpeaking } = useAccessibility();
   const { startListening, stopListening, isListening, transcript } = useSpeech();
   const { stats } = useRecyclingLog();
 

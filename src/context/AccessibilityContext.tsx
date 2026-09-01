@@ -105,6 +105,29 @@ export function AccessibilityProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
+    if (!settings.autoSpeak || typeof document === 'undefined') return;
+    const readTarget = (target: EventTarget | null) => {
+      if (!(target instanceof HTMLElement)) return;
+      const element = target.closest('button, a, input, textarea, select, [role="button"], [role="switch"]') ?? target;
+      const text = element.getAttribute('aria-label') || element.textContent || '';
+      const value = element instanceof HTMLInputElement || element instanceof HTMLTextAreaElement ? element.value : '';
+      const spokenText = `${text} ${value}`.replace(/\s+/g, ' ').trim().slice(0, 300);
+      if (spokenText) speak(spokenText);
+    };
+    const onClick = (event: MouseEvent) => readTarget(event.target);
+    const onSelection = () => {
+      const selection = window.getSelection()?.toString().replace(/\s+/g, ' ').trim();
+      if (selection) speak(selection.slice(0, 300));
+    };
+    document.addEventListener('click', onClick, true);
+    document.addEventListener('selectionchange', onSelection);
+    return () => {
+      document.removeEventListener('click', onClick, true);
+      document.removeEventListener('selectionchange', onSelection);
+    };
+  }, [settings.autoSpeak, speak]);
+
+  useEffect(() => {
     return () => { window.speechSynthesis?.cancel(); };
   }, []);
 

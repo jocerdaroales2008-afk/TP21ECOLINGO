@@ -59,10 +59,10 @@ export function CameraScanner({ onResult }: { onResult?: (item: RecyclingItem) =
   const analyzeImage = async (image: HTMLCanvasElement | HTMLImageElement) => {
     setPhase('scanning');
     try {
-      const predictions = await (await getModel()).classify(image);
+      const predictions = await (await getModel()).classify(image, 5);
       const prediction = predictions[0];
       if (!prediction) throw new Error('empty');
-      const item = classifyMaterial(prediction.className);
+      const item = classifyMaterial(predictions.map((result) => result.className).join(' '));
       setDetectedItem(item);
       setConfidence(prediction.probability);
       setPhase('result');
