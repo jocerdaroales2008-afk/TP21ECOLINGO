@@ -19,7 +19,9 @@ if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY || SUPABASE_SERVICE_ROLE_KEY.inc
   throw new Error('Define SUPABASE_URL y SUPABASE_SERVICE_ROLE_KEY antes de ejecutar el seed.');
 }
 
-const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
+  global: { fetch },
+});
 
 function toMaterials(value) {
   if (Array.isArray(value)) return value.map(String).map((material) => material.trim()).filter(Boolean);
@@ -83,7 +85,7 @@ async function cargarPuntosOficialesMMA() {
         .from('recycling_points')
         .upsert(chunk, { onConflict: 'latitude,longitude' });
 
-      if (error) throw new Error(`Error en el lote ${i / chunkSize + 1}: ${error.message}`);
+      if (error) throw new Error(`Error en el lote ${i / chunkSize + 1}: ${error.message} (${error.code ?? 'sin código'})`);
       console.log(`Lote ${i / chunkSize + 1} cargado (${chunk.length} puntos).`);
     }
 
