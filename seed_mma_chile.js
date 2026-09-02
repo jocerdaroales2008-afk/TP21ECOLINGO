@@ -56,7 +56,11 @@ async function cargarPuntosOficialesMMA() {
       return response.json();
     }));
 
-    const data = [...new Map(responses.flat().map((item) => [`${item.lat},${item.lng}`, item])).values()];
+    const data = [...new Map(
+      responses.flat()
+        .filter((item) => item.type === 'pl')
+        .map((item) => [`${item.lat},${item.lng}`, item]),
+    ).values()];
     console.log(`Se encontraron ${data.length} puntos oficiales registrados por el gobierno de Chile.`);
 
     const puntosFormateados = data
@@ -77,6 +81,9 @@ async function cargarPuntosOficialesMMA() {
       .filter((point) => Number.isFinite(point.latitude) && Number.isFinite(point.longitude));
 
     console.log(`Insertando ${puntosFormateados.length} puntos limpios validados en Supabase...`);
+
+    const { error: deleteError } = await supabase.from('recycling_points').delete().neq('id', -1);
+    if (deleteError) throw new Error(`No se pudieron reemplazar los puntos anteriores: ${deleteError.message} (${deleteError.code ?? 'sin código'})`);
 
     const chunkSize = 100;
     for (let i = 0; i < puntosFormateados.length; i += chunkSize) {

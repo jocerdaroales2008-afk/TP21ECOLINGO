@@ -124,9 +124,9 @@ const CATEGORY_SIGNALS: Record<MaterialCategory, string[]> = {
   organico: ['comida', 'fruta', 'frutas', 'verdura', 'verduras', 'cascara', 'cascaras', 'café', 'te', 'hojas', 'compost', 'resto'],
   papel: ['papel', 'carton', 'caja', 'pizza', 'periodico', 'revista', 'libro', 'sobre', 'tetra', 'brik'],
   plastico: ['plastico', 'pet', 'envase', 'bolsa', 'botella', 'yogur', 'envoltorio'],
-  vidrio: ['vidrio', 'frasco', 'frascos', 'tarro', 'tarros', 'botella', 'botellas'],
+  vidrio: ['vidrio', 'frasco', 'frascos', 'tarro', 'tarros', 'botella de vidrio', 'botellas de vidrio'],
   metal: ['metal', 'lata', 'latas', 'atun', 'aluminio', 'hojalata', 'cobre'],
-  raee: ['celular', 'movil', 'telefono', 'cargador', 'cable', 'electronico', 'computador', 'electrodomestico', 'pantalla'],
+  raee: ['celular', 'movil', 'telefono', 'cargador', 'cable', 'electronico', 'computador', 'electrodomestico', 'pantalla', 'ampolleta', 'bombilla', 'abridor electrico'],
   pilas: ['pila', 'pilas', 'bateria', 'baterias'],
   textil: ['ropa', 'textil', 'tela', 'zapato', 'zapatos', 'zapatilla', 'abrigo'],
   peligroso: ['pintura', 'solvente', 'quimico', 'tox', 'aceite', 'aerosol', 'medicamento', 'jeringa'],
@@ -134,8 +134,40 @@ const CATEGORY_SIGNALS: Record<MaterialCategory, string[]> = {
 
 const normalize = (value: string) => value.toLocaleLowerCase('es').normalize('NFD').replace(/[\u0300-\u036f]/g, '');
 
+const VISUAL_LABEL_TRANSLATIONS: Record<string, string> = {
+  'can opener': 'abridor de latas metal',
+  'tin opener': 'abridor de latas metal',
+  'oil filter': 'filtro de aceite peligroso',
+  'plastic bag': 'bolsa de plástico',
+  'shopping bag': 'bolsa de plástico',
+  'carton': 'cartón',
+  'cardboard': 'cartón',
+  'light bulb': 'ampolleta electrónica',
+  'straw': 'bombilla de plástico',
+  'battery': 'batería',
+  'cell phone': 'celular electrónico',
+  'mobile phone': 'celular electrónico',
+  'wine bottle': 'botella de vidrio',
+  'water bottle': 'botella de plástico',
+};
+
+export function translateVisualLabels(labels: string[]): string {
+  return labels.map((label) => VISUAL_LABEL_TRANSLATIONS[normalize(label)] ?? 'residuo no identificado').join(' ');
+}
+
 export function classifyMaterial(input: string): RecyclingItem {
   const normalized = normalize(input);
+  const priorityCategories: [MaterialCategory, string[]][] = [
+    ['pilas', ['pila', 'bateria']],
+    ['raee', ['ampolleta', 'bombilla', 'celular', 'telefono', 'cargador', 'electronico']],
+    ['peligroso', ['pintura', 'solvente', 'quimico', 'aceite', 'aerosol', 'medicamento']],
+    ['metal', ['lata', 'aluminio', 'metal', 'atun', 'abridor']],
+    ['vidrio', ['vidrio', 'frasco', 'tarro']],
+    ['plastico', ['plastico', 'pet', 'bolsa', 'botella', 'envase']],
+    ['papel', ['papel', 'carton', 'caja', 'tetra', 'brik']],
+    ['organico', ['comida', 'fruta', 'verdura', 'cascara', 'cafe', 'compost']],
+  ];
+  const priorityMatch = priorityCategories.find(([, signals]) => signals.some((signal) => normalized.includes(signal)));
   const exactItem = RECYCLING_ITEMS
     .map((item) => ({ item, score: [item.name, ...item.keywords].reduce((score, signal) => score + (normalized.includes(normalize(signal)) ? 3 : 0), 0) }))
     .sort((a, b) => b.score - a.score)[0];
@@ -143,7 +175,7 @@ export function classifyMaterial(input: string): RecyclingItem {
     category,
     score: CATEGORY_SIGNALS[category].reduce((score, signal) => score + (normalized.includes(normalize(signal)) ? 1 : 0), 0),
   })).sort((a, b) => b.score - a.score);
-  const category = categoryScores[0]?.score ? categoryScores[0].category : exactItem?.item.category ?? 'peligroso';
+  const category = priorityMatch?.[0] ?? (categoryScores[0]?.score ? categoryScores[0].category : exactItem?.item.category ?? 'peligroso');
   if (exactItem?.score) return exactItem.item;
   const guide = MATERIAL_GUIDES.find((entry) => entry.category === category);
   return {

@@ -297,12 +297,6 @@ function HomePage({
     }
   }, [speech.transcript, setSelectedItem]);
 
-  const results = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    if (!q) return [];
-    return RECYCLING_ITEMS.filter((item) => [item.name, ...item.keywords].some((value) => value.toLowerCase().includes(q))).slice(0, 5);
-  }, [query]);
-
   const speakSteps = () => {
     if (!selectedItem) return;
     speech.speak(`${selectedItem.name}. Paso 1: ${selectedItem.steps[0]} Paso 2: ${selectedItem.steps[1]} Paso 3: ${selectedItem.steps[2]}`);
@@ -342,7 +336,11 @@ function HomePage({
           <input
             className="eco-input pl-12 pr-14"
             value={query}
-            onChange={(event) => setQuery(event.target.value)}
+            onChange={(event) => {
+              const value = event.target.value;
+              setQuery(value);
+              setSelectedItem(value.trim() ? classifyMaterial(value) : null);
+            }}
             placeholder="Ej.: botella de vidrio, caja de leche..."
             aria-label="Buscar residuo"
           />
@@ -352,35 +350,7 @@ function HomePage({
             </button>
           )}
 
-          {results.length > 0 && (
-            <div className="absolute left-0 right-0 top-[56px] z-20 overflow-hidden rounded-xl border border-[var(--eco-border)] bg-[var(--eco-card)] shadow-xl">
-              {results.map((result) => (
-                <button
-                  key={result.id}
-                  onClick={() => {
-                    setSelectedItem(result);
-                    setQuery(result.name);
-                  }}
-                  className="flex w-full items-center gap-3 border-b border-[var(--eco-border)] p-3 text-left hover:bg-[var(--eco-surface)]"
-                >
-                  <span className="flex h-9 w-9 items-center justify-center rounded-lg" style={{ backgroundColor: `${MATERIAL_COLORS[result.category]}20`, color: MATERIAL_COLORS[result.category] }}>
-                    <Icon name={result.icon} size={19} />
-                  </span>
-                  <span>
-                    <span className="block font-semibold">{result.name}</span>
-                    <span className="text-xs text-[var(--eco-text-muted)]">{MATERIAL_LABELS[result.category]}</span>
-                  </span>
-                </button>
-              ))}
-            </div>
-          )}
         </div>
-
-        {query.trim() && results.length === 0 && (
-          <button className="eco-btn-outline mt-3" onClick={() => setSelectedItem(classifyMaterial(query))}>
-            Clasificar consulta
-          </button>
-        )}
 
         <div className="mt-4 flex flex-col items-center gap-3 sm:flex-row">
           <button

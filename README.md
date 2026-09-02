@@ -1,3 +1,5 @@
+
+grant delete on public.recycling_points to service_role;
 # TP21ECOLINGO
 
 [![Open in Bolt](https://bolt.new/static/open-in-bolt.svg)](https://bolt.new/~/sb1-qfxdsj8k)
@@ -46,7 +48,7 @@ create policy "Anyone can read official recycling points"
 	on public.recycling_points for select using (true);
 
 grant usage on schema public to service_role;
-grant select, insert, update on public.recycling_points to service_role;
+grant select, insert, update, delete on public.recycling_points to service_role;
 ```
 
 El seed usa la clave privada `SUPABASE_SERVICE_ROLE_KEY`, por lo que debe ejecutarse solo desde una terminal local o servidor seguro. Copia `.env.example` a `.env`, completa `SUPABASE_URL` y `SUPABASE_SERVICE_ROLE_KEY`, y ejecuta:

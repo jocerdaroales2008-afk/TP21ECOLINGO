@@ -1,7 +1,7 @@
 import { useState, useRef, useCallback, useEffect, type ChangeEvent } from 'react';
 import { Camera, X, Check, Loader2, RefreshCw, Volume2 } from 'lucide-react';
 import { useAccessibility } from '@/context/AccessibilityContext';
-import { classifyMaterial } from '@/data/recyclingData';
+import { classifyMaterial, translateVisualLabels } from '@/data/recyclingData';
 import { MATERIAL_COLORS, MATERIAL_LABELS, type RecyclingItem } from '@/types';
 import * as mobilenet from '@tensorflow-models/mobilenet';
 import '@tensorflow/tfjs';
@@ -33,8 +33,12 @@ export function CameraScanner({ onResult }: { onResult?: (item: RecyclingItem) =
   }, []);
 
   useEffect(() => {
+    if (phase === 'camera' && streamRef.current && videoRef.current && videoRef.current.srcObject !== streamRef.current) {
+      videoRef.current.srcObject = streamRef.current;
+      void videoRef.current.play();
+    }
     return () => stopCamera();
-  }, [stopCamera]);
+  }, [phase, stopCamera]);
 
   const startCamera = async () => {
     setError('');
@@ -46,10 +50,6 @@ export function CameraScanner({ onResult }: { onResult?: (item: RecyclingItem) =
         audio: false,
       });
       streamRef.current = stream;
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        await videoRef.current.play();
-      }
     } catch {
       setError('No se pudo acceder a la cámara. Verifica los permisos del navegador.');
       setPhase('idle');
@@ -62,7 +62,8 @@ export function CameraScanner({ onResult }: { onResult?: (item: RecyclingItem) =
       const predictions = await (await getModel()).classify(image, 5);
       const prediction = predictions[0];
       if (!prediction) throw new Error('empty');
-      const item = classifyMaterial(predictions.map((result) => result.className).join(' '));
+      const labels = predictions.map((result) => result.className);
+      const item = classifyMaterial(translateVisualLabels(labels));
       setDetectedItem(item);
       setConfidence(prediction.probability);
       setPhase('result');

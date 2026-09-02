@@ -22,18 +22,19 @@ export function MapView({ points, userLocation }: MapViewProps) {
 
     try {
       const center: [number, number] = [-33.445, -70.667];
-      const map = L.map(containerRef.current, { 
+      const map = L.map(containerRef.current, {
         zoomControl: false,
         dragging: true,
       }).setView(center, 12);
       
-      L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
-        attribution: '&copy; OpenStreetMap contributors &copy; CARTO',
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '&copy; OpenStreetMap contributors',
         maxZoom: 19,
       }).addTo(map);
 
       mapRef.current = map;
       setMapReady(true);
+      window.setTimeout(() => map.invalidateSize(), 0);
 
       return () => {
         if (mapRef.current) {
@@ -55,18 +56,18 @@ export function MapView({ points, userLocation }: MapViewProps) {
     if (!map || !mapReady) return;
 
     if (userLocation) {
-      if (userMarkerRef.current) {
-        map.removeLayer(userMarkerRef.current);
+      if (!userMarkerRef.current) {
+        userMarkerRef.current = L.marker([userLocation.lat, userLocation.lng], {
+          icon: L.divIcon({
+            className: '',
+            html: '<div class="user-location-marker" aria-hidden="true"></div>',
+            iconSize: [24, 24],
+            iconAnchor: [12, 12],
+          }),
+        }).addTo(map).bindPopup('<strong>¡Estás aquí!</strong>');
+      } else {
+        userMarkerRef.current.setLatLng([userLocation.lat, userLocation.lng]);
       }
-
-      userMarkerRef.current = L.marker([userLocation.lat, userLocation.lng], {
-        icon: L.divIcon({
-          className: '',
-          html: '<div class="user-location-marker" aria-hidden="true"></div>',
-          iconSize: [24, 24],
-          iconAnchor: [12, 12],
-        }),
-      }).addTo(map).bindPopup('<strong>¡Estás aquí!</strong>');
 
       map.setView([userLocation.lat, userLocation.lng], 14, { animate: true });
     }
@@ -120,9 +121,19 @@ export function MapView({ points, userLocation }: MapViewProps) {
     }
   }, [points, userLocation, mapReady]);
 
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !mapReady) return;
+    const refresh = () => map.invalidateSize({ animate: false });
+    refresh();
+    window.setTimeout(refresh, 100);
+    window.addEventListener('resize', refresh);
+    return () => window.removeEventListener('resize', refresh);
+  }, [mapReady]);
+
   return (
-    <div className="map-shell">
-      <div ref={containerRef} className="h-[min(68vh,560px)] min-h-[360px] w-full" aria-label="Mapa de puntos de reciclaje" role="application" />
+    <div className="map-shell w-full overflow-hidden rounded-2xl">
+      <div ref={containerRef} className="h-[calc(100vh-180px)] min-h-[360px] max-h-[620px] w-full" aria-label="Mapa de puntos de reciclaje" role="application" />
     </div>
   );
 }
