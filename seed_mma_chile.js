@@ -13,7 +13,9 @@ const REGION_CENTERS = [
   [-39.814, -73.245], [-41.469, -72.942], [-43.118, -73.620], [-53.163, -70.917],
 ];
 
-if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY || SUPABASE_SERVICE_ROLE_KEY.includes('your_')) {
+const hasValidSecretKey = SUPABASE_SERVICE_ROLE_KEY?.startsWith('sb_secret_') || SUPABASE_SERVICE_ROLE_KEY?.startsWith('eyJ');
+
+if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY || SUPABASE_SERVICE_ROLE_KEY.includes('your_') || !hasValidSecretKey) {
   throw new Error('Define SUPABASE_URL y SUPABASE_SERVICE_ROLE_KEY antes de ejecutar el seed.');
 }
 
