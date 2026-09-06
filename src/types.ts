@@ -39,6 +39,7 @@ export interface CleanPoint {
   id: number;
   name: string;
   address: string;
+  region?: string;
   lat: number;
   lng: number;
   materials: MaterialCategory[];

@@ -1,4 +1,4 @@
-﻿import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from 'react';
+import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from 'react';
 import {
   Accessibility,
   Award,
@@ -60,8 +60,7 @@ import { EcoMascota } from '@/components/EcoMascota';
 import { CameraScanner } from '@/components/CameraScanner';
 import { MapView } from '@/components/MapView';
 import { SpeakButton } from '@/components/SpeakButton';
-import { saveCommunitySuggestion } from '@/services/communitySuggestions';
-import { getOfficialRecyclingPoints } from '@/services/officialRecyclingPoints';
+import { CHILEAN_REGIONS, DEFAULT_CLEAN_POINTS, loadCustomPoints, addCustomPoint } from '@/data/cleanPoints';
 
 type Tab = 'home' | 'map' | 'guide' | 'achievements' | 'accessibility' | 'scanner';
 
@@ -480,23 +479,21 @@ function ResultCard({ item, onSpeak, speech, onLog }: { item: RecyclingItem; onS
 
 function MapPage() {
   const [filter, setFilter] = useState<'all' | MaterialCategory>('all');
+  const [regionFilter, setRegionFilter] = useState<string>('all');
   const [points, setPoints] = useState<CleanPoint[]>([]);
-  const [searching, setSearching] = useState(false);
-  const [searchError, setSearchError] = useState('');
   const [suggestionOpen, setSuggestionOpen] = useState(false);
+  const [selectedPointId, setSelectedPointId] = useState<number | null>(null);
   const { location, status, error, requestLocation } = useGeolocation();
 
   useEffect(() => {
-    setSearching(true);
-    setSearchError('');
-    getOfficialRecyclingPoints()
-      .then(setPoints)
-      .catch((requestError: unknown) => {
-        setPoints([]);
-        setSearchError(requestError instanceof Error ? requestError.message : 'No se pudieron cargar los puntos oficiales.');
-      })
-      .finally(() => setSearching(false));
+    const custom = loadCustomPoints();
+    setPoints([...DEFAULT_CLEAN_POINTS, ...custom]);
   }, []);
+
+  const refreshPoints = () => {
+    const custom = loadCustomPoints();
+    setPoints([...DEFAULT_CLEAN_POINTS, ...custom]);
+  };
 
   const pointsWithDistance = useMemo(() => {
     return points
@@ -507,51 +504,71 @@ function MapPage() {
       .sort((a, b) => a.realDistance - b.realDistance);
   }, [location, points]);
 
-  const filtered = filter === 'all' ? pointsWithDistance : pointsWithDistance.filter((point) => point.materials.includes(filter));
+  const filtered = useMemo(() => {
+    let result = pointsWithDistance;
+    if (filter !== 'all') result = result.filter((point) => point.materials.includes(filter));
+    if (regionFilter !== 'all') result = result.filter((point) => point.region === regionFilter);
+    return result;
+  }, [pointsWithDistance, filter, regionFilter]);
 
   return (
-    <div className="animate-fade-in space-y-7">
-      <PageIntro eyebrow="Encuentra y participa" title="Puntos limpios cercanos" text="Lleva tus materiales al lugar correcto. Filtra por tipo de residuo y encuentra el punto que mejor te convenga." icon={<MapPinned size={26} />} />
+    <div className="animate-fade-in space-y-5">
+      <PageIntro eyebrow="Encuentra y participa" title="Puntos limpios cercanos" text="Lleva tus materiales al lugar correcto. Filtra por tipo de residuo o región y encuentra el punto que mejor te convenga." icon={<MapPinned size={26} />} />
 
-      <div className="flex flex-wrap items-center gap-3">
-        <button onClick={requestLocation} disabled={status === 'loading'} className="eco-btn">
-          {status === 'loading' ? <span className="animate-spin"><Navigation size={18} /></span> : <Navigation size={18} />}
-          Usar mi ubicación actual
+      <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+        <button onClick={requestLocation} disabled={status === 'loading'} className="eco-btn text-sm">
+          {status === 'loading' ? <span className="animate-spin"><Navigation size={16} /></span> : <Navigation size={16} />}
+          <span className="hidden sm:inline">Usar mi ubicación</span>
+          <span className="sm:hidden">Mi ubicación</span>
         </button>
-        <button onClick={() => setSuggestionOpen(true)} className="eco-btn-outline">
-          <Plus size={18} /> Sugerir Punto Limpio
+        <button onClick={() => setSuggestionOpen(true)} className="eco-btn-outline text-sm">
+          <Plus size={16} /> <span className="hidden sm:inline">Agregar Punto Limpio</span><span className="sm:hidden">Agregar</span>
         </button>
-        {status === 'error' && <span className="text-sm text-red-600 dark:text-red-400">{error}</span>}
-        {status === 'success' && <span className="text-sm font-semibold text-forest-600 dark:text-forest-400">Ubicación detectada — distancias calculadas</span>}
+        {status === 'success' && <span className="text-xs font-semibold text-forest-600 dark:text-forest-400 sm:text-sm">Ubicación detectada</span>}
       </div>
 
-      <div className="flex gap-2 overflow-x-auto pb-1">
-        {(['all', 'vidrio', 'papel', 'plastico', 'pilas', 'raee', 'metal', 'textil', 'peligroso'] as const).map((item) => (
-          <button key={item} onClick={() => setFilter(item)} className={`eco-chip ${filter === item ? 'active' : ''}`}>
-            {item === 'all' ? 'Todos' : MATERIAL_LABELS[item]}
-          </button>
-        ))}
-      </div>
-
-      {searching && <p className="text-sm text-[var(--eco-text-muted)]">Cargando puntos oficiales del MMA...</p>}
       {status === 'error' && error && <p className="text-sm text-red-600">{error}</p>}
-      {searchError && <p className="text-sm text-red-600">{searchError}</p>}
-      {!searching && location && filtered.length === 0 && <p className="eco-card p-5 text-sm text-[var(--eco-text-muted)]">No encontramos puntos de reciclaje registrados en esta zona.</p>}
-      {!location && status !== 'loading' && !searchError && !searching && (
-        <p className="eco-card p-5 text-sm text-[var(--eco-text-muted)]">Activa tu ubicación para ordenar los puntos por cercanía y mantener tu posición actualizada.</p>
+
+      <div className="space-y-2">
+        <div className="flex gap-2 overflow-x-auto pb-1">
+          {(['all', 'vidrio', 'papel', 'plastico', 'pilas', 'raee', 'metal', 'textil', 'peligroso'] as const).map((item) => (
+            <button key={item} onClick={() => setFilter(item)} className={`eco-chip whitespace-nowrap ${filter === item ? 'active' : ''}`}>
+              {item === 'all' ? 'Todos' : MATERIAL_LABELS[item]}
+            </button>
+          ))}
+        </div>
+        <select
+          className="eco-input text-sm"
+          value={regionFilter}
+          onChange={(e) => setRegionFilter(e.target.value)}
+          aria-label="Filtrar por región"
+        >
+          <option value="all">Todas las regiones</option>
+          {CHILEAN_REGIONS.map((region) => (
+            <option key={region} value={region}>{region}</option>
+          ))}
+        </select>
+      </div>
+
+      {filtered.length === 0 && (
+        <p className="eco-card p-5 text-sm text-[var(--eco-text-muted)]">No encontramos puntos de reciclaje que coincidan con tu filtro.</p>
       )}
 
-      <div className="grid gap-6 lg:grid-cols-[1.35fr_1fr]">
-        <MapView points={filtered} userLocation={location} />
+      <div className="grid gap-4 lg:grid-cols-[1.35fr_1fr]">
+        <MapView points={filtered} userLocation={location} selectedPointId={selectedPointId} onSelectPoint={setSelectedPointId} />
 
-        <div className="space-y-3">
+        <div className="space-y-3 lg:max-h-[calc(100vh-280px)] lg:overflow-y-auto lg:pr-1">
           {filtered.map((point, index) => (
-            <div key={point.id} className="eco-card p-4 transition hover:-translate-y-0.5 hover:shadow-md">
+            <button
+              key={point.id}
+              onClick={() => setSelectedPointId(point.id)}
+              className={`eco-card w-full p-4 text-left transition hover:-translate-y-0.5 hover:shadow-md ${selectedPointId === point.id ? 'ring-2 ring-forest-600' : ''}`}
+            >
               <div className="flex gap-3">
                 <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-forest-700 text-sm font-bold text-white">{index + 1}</span>
                 <div className="min-w-0 flex-1">
                   <div className="flex items-start justify-between gap-2">
-                    <h3 className="font-bold">{point.name}</h3>
+                    <h3 className="font-bold leading-tight">{point.name}</h3>
                     <span className="shrink-0 rounded-full bg-forest-100 px-2 py-1 text-xs font-bold text-forest-800 dark:bg-forest-900 dark:text-forest-200">
                       {formatDistance(point.realDistance)}
                     </span>
@@ -560,84 +577,111 @@ function MapPage() {
                     <MapPin size={15} className="mt-0.5 shrink-0" />
                     {point.address}
                   </p>
-                  <p className="mt-2 text-xs text-[var(--eco-text-muted)]">{point.hours}</p>
-                  <div className="mt-3 flex flex-wrap gap-1.5">
+                  {point.region && <p className="mt-0.5 text-xs font-semibold text-[var(--eco-text-muted)]">{point.region}</p>}
+                  <p className="mt-1.5 text-xs text-[var(--eco-text-muted)]">{point.hours}</p>
+                  <div className="mt-2.5 flex flex-wrap gap-1.5">
                     {point.materials.map((material) => (
                       <span key={material} className="rounded-md px-2 py-1 text-[10px] font-semibold" style={{ backgroundColor: `${MATERIAL_COLORS[material]}18`, color: MATERIAL_COLORS[material] }}>
                         {MATERIAL_LABELS[material]}
                       </span>
                     ))}
                   </div>
-                  <a className="mt-3 inline-flex items-center gap-1 text-sm font-bold text-forest-700" target="_blank" rel="noreferrer" href={`https://www.google.com/maps/dir/?api=1&destination=${point.lat},${point.lng}`}>
+                  <a
+                    className="mt-3 inline-flex items-center gap-1 text-sm font-bold text-forest-700"
+                    target="_blank"
+                    rel="noreferrer"
+                    href={`https://www.google.com/maps/dir/?api=1&destination=${point.lat},${point.lng}`}
+                    onClick={(e) => e.stopPropagation()}
+                  >
                     Cómo llegar <Navigation size={14} />
                   </a>
                 </div>
               </div>
-            </div>
+            </button>
           ))}
         </div>
       </div>
-      {suggestionOpen && <SuggestionModal onClose={() => setSuggestionOpen(false)} />}
+      {suggestionOpen && <AddPointModal onClose={() => setSuggestionOpen(false)} onAdded={refreshPoints} />}
     </div>
   );
 }
 
-function SuggestionModal({ onClose }: { onClose: () => void }) {
+function AddPointModal({ onClose, onAdded }: { onClose: () => void; onAdded: () => void }) {
   const [name, setName] = useState('');
+  const [region, setRegion] = useState<string>('Región Metropolitana');
   const [address, setAddress] = useState('');
-  const [coordinates, setCoordinates] = useState('');
   const [materials, setMaterials] = useState<MaterialCategory[]>(['papel', 'plastico']);
-  const [saving, setSaving] = useState(false);
   const [feedback, setFeedback] = useState('');
 
   const toggleMaterial = (material: MaterialCategory) => {
     setMaterials((current) => current.includes(material) ? current.filter((item) => item !== material) : [...current, material]);
   };
 
-  const submit = async (event: FormEvent<HTMLFormElement>) => {
+  const submit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    const [latText, lngText] = coordinates.split(',').map((value) => value.trim());
-    const lat = coordinates ? Number(latText) : null;
-    const lng = coordinates ? Number(lngText) : null;
-    if (!name.trim() || !address.trim() || (coordinates && (!Number.isFinite(lat) || !Number.isFinite(lng)))) {
-      setFeedback('Completa nombre, dirección y coordenadas con el formato latitud, longitud.');
+    if (!name.trim() || !address.trim() || materials.length === 0) {
+      setFeedback('Completa el nombre, la dirección y selecciona al menos un material.');
       return;
     }
-    setSaving(true);
-    setFeedback('');
-    try {
-      await saveCommunitySuggestion({ name: name.trim(), address: address.trim(), lat, lng, materials });
-      setFeedback('Sugerencia enviada para revisión. ¡Gracias por participar!');
-      setName('');
-      setAddress('');
-      setCoordinates('');
-    } catch (error) {
-      setFeedback(error instanceof Error ? error.message : 'No se pudo enviar la sugerencia.');
-    } finally {
-      setSaving(false);
-    }
+    const customPoints = loadCustomPoints();
+    const newId = Math.max(0, ...DEFAULT_CLEAN_POINTS.map((p) => p.id), ...customPoints.map((p) => p.id)) + 1;
+    const newPoint: CleanPoint = {
+      id: newId,
+      name: name.trim(),
+      address: address.trim(),
+      region,
+      lat: -33.4489,
+      lng: -70.6693,
+      materials,
+      distance: 0,
+      hours: 'Horario no especificado',
+    };
+    addCustomPoint(newPoint);
+    setFeedback('¡Punto Limpio agregado con éxito! Ya aparece en el mapa.');
+    setName('');
+    setAddress('');
+    setMaterials(['papel', 'plastico']);
+    onAdded();
+    window.setTimeout(onClose, 1200);
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" role="dialog" aria-modal="true" aria-labelledby="suggestion-title">
-      <form onSubmit={submit} className="w-full max-w-lg space-y-4 rounded-2xl bg-[var(--eco-card)] p-5 shadow-2xl">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" role="dialog" aria-modal="true" aria-labelledby="add-point-title">
+      <form onSubmit={submit} className="w-full max-w-lg space-y-4 rounded-2xl bg-[var(--eco-card)] p-5 shadow-2xl sm:p-6">
         <div className="flex items-center justify-between gap-4">
-          <h2 id="suggestion-title" className="text-xl font-extrabold">Sugerir Punto Limpio</h2>
-          <button type="button" onClick={onClose} className="rounded-lg p-2" aria-label="Cerrar sugerencia"><X size={20} /></button>
+          <h2 id="add-point-title" className="text-xl font-extrabold">Agregar Punto Limpio</h2>
+          <button type="button" onClick={onClose} className="rounded-lg p-2" aria-label="Cerrar"><X size={20} /></button>
         </div>
-        <input className="eco-input" required value={name} onChange={(event) => setName(event.target.value)} placeholder="Nombre del lugar" />
-        <input className="eco-input" required value={address} onChange={(event) => setAddress(event.target.value)} placeholder="Dirección" />
-        <input className="eco-input" value={coordinates} onChange={(event) => setCoordinates(event.target.value)} placeholder="Coordenadas opcionales: -33.45, -70.66" />
+        <div className="space-y-1.5">
+          <label className="text-sm font-bold" htmlFor="add-name">Nombre del lugar</label>
+          <input id="add-name" className="eco-input" required value={name} onChange={(event) => setName(event.target.value)} placeholder="Ej: Punto Limpio Mi Barrio" />
+        </div>
+        <div className="space-y-1.5">
+          <label className="text-sm font-bold" htmlFor="add-region">Región</label>
+          <select id="add-region" className="eco-input" value={region} onChange={(event) => setRegion(event.target.value)}>
+            {CHILEAN_REGIONS.map((r) => (
+              <option key={r} value={r}>{r}</option>
+            ))}
+          </select>
+        </div>
+        <div className="space-y-1.5">
+          <label className="text-sm font-bold" htmlFor="add-address">Dirección</label>
+          <input id="add-address" className="eco-input" required value={address} onChange={(event) => setAddress(event.target.value)} placeholder="Ej: Av. Principal 123, Comuna" />
+        </div>
         <fieldset>
-          <legend className="mb-2 text-sm font-bold">Materiales aceptados</legend>
+          <legend className="mb-2 text-sm font-bold">Materiales que recibe</legend>
           <div className="flex flex-wrap gap-2">
             {(['papel', 'plastico', 'vidrio', 'metal', 'organico', 'raee', 'pilas', 'textil'] as MaterialCategory[]).map((material) => (
               <button type="button" key={material} onClick={() => toggleMaterial(material)} className={`eco-chip ${materials.includes(material) ? 'active' : ''}`} aria-pressed={materials.includes(material)}>{MATERIAL_LABELS[material]}</button>
             ))}
           </div>
         </fieldset>
-        {feedback && <p className="text-sm text-[var(--eco-text-muted)]" role="status">{feedback}</p>}
-        <button type="submit" disabled={saving} className="eco-btn w-full">{saving ? 'Enviando...' : 'Enviar sugerencia'}</button>
+        {feedback && (
+          <p className={`text-sm font-semibold ${feedback.includes('éxito') ? 'text-forest-600 dark:text-forest-400' : 'text-red-600'}`} role="status">{feedback}</p>
+        )}
+        <button type="submit" className="eco-btn w-full">
+          <Plus size={18} /> Agregar al mapa
+        </button>
       </form>
     </div>
   );
